@@ -165,7 +165,16 @@ const checkinRules = {
     body('numero_ninos')
       .optional()
       .isInt({ min: 0 })
-      .withMessage('Número de niños no puede ser negativo')
+      .withMessage('Número de niños no puede ser negativo'),
+    body('biometria_verificada')
+      .optional()
+      .isBoolean()
+      .withMessage('La verificación biométrica debe ser verdadera o falsa'),
+    body('tipo_verificacion')
+      .optional()
+      .isString()
+      .withMessage('El tipo de verificación es inválido')
+      .trim()
   ]
 };
 

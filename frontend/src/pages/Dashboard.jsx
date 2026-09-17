@@ -197,7 +197,7 @@ const Dashboard = () => {
             </div>
             <div className="p-4 bg-gray-50 rounded-lg">
               <p className="text-sm text-gray-500">Tasa Ocupación</p>
-              <p className="text-2xl font-bold text-blue-600">
+              <p className="text-2xl font-bold text-[#b88a34]">
                 {stats.habitaciones.total > 0 
                   ? Math.round((stats.habitaciones.ocupadas / stats.habitaciones.total) * 100) 
                   : 0}%

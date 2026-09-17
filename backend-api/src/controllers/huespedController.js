@@ -38,31 +38,43 @@ const create = async (req, res) => {
       return res.status(201).json({ success: true, data: newHuesped, message: 'Huésped creado exitosamente' });
     }
 
-    // Insert persona
+    // Insert persona real en dbo.persona: documento es una sola columna, sin tipo_documento/numero_documento ni telefono.
+    const documento = `${tipo_documento || 'CI'} ${numero_documento}`;
     const personaResult = await db.query(`
-      INSERT INTO persona (nombres, apellidos, tipo_documento, numero_documento, telefono, email)
-      VALUES (@nombres, @apellidos, @tipo_documento, @numero_documento, @telefono, @email);
+      INSERT INTO dbo.persona (nombres, apellidos, documento, email)
+      VALUES (@nombres, @apellidos, @documento, @email);
       SELECT SCOPE_IDENTITY() as id_persona;
     `, {
       nombres,
       apellidos,
-      tipo_documento: tipo_documento || 'CI',
-      numero_documento,
-      telefono: telefono || '',
+      documento,
       email: email || ''
     });
 
     const idPersona = personaResult[0].id_persona;
-    const numeroHuesped = `H${Date.now().toString().slice(-6)}`;
 
-    // Insert huesped
+    // Insert teléfono real en dbo.persona_telefono en caso de venir en el body.
+    if (telefono) {
+      await db.query(`
+        INSERT INTO dbo.persona_telefono (id_persona, telefono, tipo, principal)
+        VALUES (@id_persona, @telefono, @tipo, @principal);
+      `, {
+        id_persona: idPersona,
+        telefono,
+        tipo: 'celular',
+        principal: 1
+      });
+    }
+
+    // Insert huesped real en dbo.huesped: no tiene numero_huesped.
     const huespedResult = await db.query(`
-      INSERT INTO huesped (id_persona, numero_huesped)
-      VALUES (@id_persona, @numero_huesped);
+      INSERT INTO dbo.huesped (id_persona, notas)
+      VALUES (@id_persona, @notas);
       SELECT SCOPE_IDENTITY() as id_huesped;
-    `, { id_persona: idPersona, numero_huesped: numeroHuesped });
+    `, { id_persona: idPersona, notas: '' });
 
     const idHuesped = huespedResult[0].id_huesped;
+    const numeroHuesped = `H${String(idHuesped).padStart(3, '0')}`;
 
     res.status(201).json({
       success: true,

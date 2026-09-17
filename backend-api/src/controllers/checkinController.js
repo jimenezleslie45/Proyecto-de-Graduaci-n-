@@ -16,6 +16,159 @@ const DEMO_ESTADIAS = [
 
 let demoEstadias = [...DEMO_ESTADIAS];
 
+const getActualColumns = async (tableName) => {
+  try {
+    const result = await db.query(`
+      SELECT COLUMN_NAME
+      FROM INFORMATION_SCHEMA.COLUMNS
+      WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = @tableName
+      ORDER BY ORDINAL_POSITION
+    `, { tableName });
+    return (result || []).map((row) => String(row.COLUMN_NAME || row.column_name || '').toLowerCase());
+  } catch (error) {
+    logger.warn(`No se pudieron leer columnas de ${tableName}: ${error.message}`);
+    return [];
+  }
+};
+
+const createEstadiaRecord = async ({
+  id_habitacion,
+  id_huesped,
+  fecha_checkout_prevista,
+  numero_adultos,
+  numero_ninos,
+  precio_noche,
+  observaciones,
+  metodo_pago,
+  recepcionista_id,
+  estado = 'ACTIVA',
+  biometria_verificada = false,
+  tipo_verificacion = null
+}) => {
+  const columns = await getActualColumns('estadia');
+
+  const payload = {
+    id_habitacion: Number(id_habitacion),
+    id_huesped: Number(id_huesped),
+    fecha_checkout_prevista: fecha_checkout_prevista ? new Date(fecha_checkout_prevista) : new Date(),
+    cantidad_personas: Number(numero_adultos || 1) + Number(numero_ninos || 0),
+    total_cargo: Number(precio_noche || 0),
+    metodo_pago: metodo_pago || null,
+    observaciones: observaciones || '',
+    estado,
+    recepcionista_id: recepcionista_id || null,
+    numero_estadia: `E-${Date.now()}`,
+    biometria_verificada: Boolean(biometria_verificada),
+    tipo_verificacion: tipo_verificacion || null
+  };
+
+  const insertColumns = [];
+  const insertValues = [];
+  const params = { ...payload };
+
+  if (columns.includes('id_habitacion')) {
+    insertColumns.push('id_habitacion');
+    insertValues.push('@id_habitacion');
+  }
+  if (columns.includes('id_huesped')) {
+    insertColumns.push('id_huesped');
+    insertValues.push('@id_huesped');
+  }
+  if (columns.includes('recepcionista_id')) {
+    insertColumns.push('recepcionista_id');
+    insertValues.push('@recepcionista_id');
+  } else if (columns.includes('id_empleado_checkin')) {
+    insertColumns.push('id_empleado_checkin');
+    insertValues.push('@id_empleado_checkin');
+    params.id_empleado_checkin = payload.recepcionista_id || 1;
+  }
+  if (columns.includes('numero_estadia')) {
+    insertColumns.push('numero_estadia');
+    insertValues.push('@numero_estadia');
+  }
+  const checkInColumn = columns.includes('check_in') ? 'check_in' : (columns.includes('fecha_checkin') ? 'fecha_checkin' : null);
+  if (checkInColumn) {
+    insertColumns.push(checkInColumn);
+    insertValues.push('@check_in');
+    params.check_in = new Date();
+  }
+  const checkOutColumn = columns.includes('check_out') ? 'check_out' : (columns.includes('fecha_checkout_prevista') ? 'fecha_checkout_prevista' : (columns.includes('fecha_checkout') ? 'fecha_checkout' : null));
+  if (checkOutColumn) {
+    insertColumns.push(checkOutColumn);
+    insertValues.push('@fecha_checkout_prevista');
+    params.fecha_checkout_prevista = payload.fecha_checkout_prevista;
+  }
+  if (columns.includes('numero_adultos')) {
+    insertColumns.push('numero_adultos');
+    insertValues.push('@numero_adultos');
+    params.numero_adultos = Number(numero_adultos || 1);
+  } else if (columns.includes('cantidad_personas')) {
+    insertColumns.push('cantidad_personas');
+    insertValues.push('@cantidad_personas');
+    params.cantidad_personas = payload.cantidad_personas;
+  }
+  if (columns.includes('precio_noche')) {
+    insertColumns.push('precio_noche');
+    insertValues.push('@precio_noche');
+    params.precio_noche = Number(precio_noche || 0);
+  } else if (columns.includes('total_cargo')) {
+    insertColumns.push('total_cargo');
+    insertValues.push('@total_cargo');
+    params.total_cargo = Number(precio_noche || 0);
+  }
+  if (columns.includes('estado')) {
+    insertColumns.push('estado');
+    insertValues.push('@estado');
+    params.estado = estado;
+  }
+  if (columns.includes('observaciones')) {
+    insertColumns.push('observaciones');
+    insertValues.push('@observaciones');
+    params.observaciones = payload.observaciones;
+  }
+  const biometricColumn = columns.find((column) => ['biometria_verificada', 'verificacion_biometrica'].includes(column));
+  if (biometricColumn) {
+    insertColumns.push(biometricColumn);
+    insertValues.push('@biometria_verificada');
+    params.biometria_verificada = payload.biometria_verificada ? 1 : 0;
+  }
+  const biometricTypeColumn = columns.find((column) => ['tipo_verificacion', 'metodo_verificacion', 'tipo_biometria'].includes(column));
+  if (biometricTypeColumn) {
+    insertColumns.push(biometricTypeColumn);
+    insertValues.push('@tipo_verificacion');
+    params.tipo_verificacion = payload.tipo_verificacion || 'opcional';
+  }
+  if (columns.includes('metodo_pago')) {
+    insertColumns.push('metodo_pago');
+    insertValues.push('@metodo_pago');
+    params.metodo_pago = metodo_pago || null;
+  }
+  if (columns.includes('activo')) {
+    insertColumns.push('activo');
+    insertValues.push('@activo');
+    params.activo = 1;
+  }
+  if (columns.includes('fecha_creacion')) {
+    insertColumns.push('fecha_creacion');
+    insertValues.push('@fecha_creacion');
+    params.fecha_creacion = new Date();
+  }
+
+  if (insertColumns.length === 0) {
+    throw new Error('No se encontró una estructura compatible para la tabla estadia');
+  }
+
+  const query = `
+    INSERT INTO dbo.estadia (${insertColumns.join(', ')})
+    VALUES (${insertValues.join(', ')});
+    SELECT SCOPE_IDENTITY() AS id;
+  `;
+
+  const result = await db.query(query, params);
+  const idEstadia = result && result[0] ? (result[0].id || result[0].id_estadia || result[0].ID) : null;
+  return { id: idEstadia, numero_estadia: payload.numero_estadia };
+};
+
 /**
  * Get all active stays (check-in)
  */
@@ -139,7 +292,18 @@ const getAvailableRooms = async (req, res) => {
  */
 const create = async (req, res) => {
   try {
-    const { id_habitacion, id_huesped, fecha_checkout_prevista, numero_adultos, numero_ninos, precio_noche, observaciones } = req.body;
+    const {
+      id_habitacion,
+      id_huesped,
+      fecha_checkout_prevista,
+      numero_adultos,
+      numero_ninos,
+      precio_noche,
+      observaciones,
+      metodo_pago,
+      biometria_verificada = false,
+      tipo_verificacion = null
+    } = req.body;
     const recepcionista_id = req.user.id; // El ID del usuario logueado
     const isDemoMode = !db.isConnected();
     
@@ -157,27 +321,30 @@ const create = async (req, res) => {
         numero_ninos: numero_ninos || 0,
         precio_noche: precio_noche || 50,
         estado: 'Activa',
-        observaciones: observaciones || ''
+        observaciones: observaciones || '',
+        biometria_verificada: Boolean(biometria_verificada),
+        tipo_verificacion: tipo_verificacion || null
       };
       demoEstadias.push(newEstadia);
       return res.status(201).json({ success: true, data: newEstadia, message: 'Check-in realizado exitosamente' });
     }
 
-    const query = `
-      -- FIX: Consulta adaptada a la base de datos SIGOH
-      INSERT INTO estadia (id_habitacion, id_huesped, recepcionista_id, check_in, check_out, cantidad_personas, estado, total_cargo)
-      VALUES (@id_habitacion, @id_huesped, @recepcionista_id, GETDATE(), @fecha_checkout_prevista, @cantidad_personas, 'ACTIVA', @total_cargo);
-      SELECT SCOPE_IDENTITY() as id;
-    `;
-        
-    const result = await db.query(query, { 
-      id_habitacion, 
-      id_huesped, 
+    const result = await createEstadiaRecord({
+      id_habitacion,
+      id_huesped,
+      fecha_checkout_prevista,
+      numero_adultos,
+      numero_ninos,
+      precio_noche,
+      observaciones,
+      metodo_pago,
       recepcionista_id,
-      fecha_checkout_prevista: new Date(fecha_checkout_prevista),
-      cantidad_personas: (numero_adultos || 1) + (numero_ninos || 0),
-      total_cargo: precio_noche || 0
+      biometria_verificada,
+      tipo_verificacion
     });
+
+    const idEstadia = result.id;
+    const numeroEstadia = `E${String(idEstadia).padStart(4, '0')}`;
     
     // Update room state to Occupied
     await db.query(`
@@ -186,7 +353,7 @@ const create = async (req, res) => {
     
     res.status(201).json({ 
       success: true, 
-      data: { id: result[0].id, numero_estadia: numeroEstadia },
+      data: { id: idEstadia, numero_estadia: numeroEstadia },
       message: 'Check-in realizado exitosamente' 
     });
   } catch (error) {
@@ -234,5 +401,6 @@ module.exports = {
   getById,
   getAvailableRooms,
   create,
-  searchGuest
+  searchGuest,
+  createEstadiaRecord
 };

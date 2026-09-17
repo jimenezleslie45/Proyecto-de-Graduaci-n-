@@ -19,6 +19,7 @@ import ReporteMantenimiento from '../pages/ReporteMantenimiento' // Corregido: L
 import EjecucionMantenimiento from '../pages/EjecucionMantenimiento' // Corregido: La ruta no tiene 'Mantenimiento'
 import Reportes from '../pages/Reportes' // Corregido: El componente se llama Reportes
 import Usuarios from '../pages/Usuarios' // Corregido: El componente se llama Usuarios
+import Reservas from '../pages/Reservas'
 
 const AppRoutes = () => {
   const { autenticado } = useAuthStore()
@@ -34,6 +35,7 @@ const AppRoutes = () => {
           <Route path="panel" element={<Panel />} /> 
           <Route path="habitaciones" element={<Habitaciones />} />
           <Route path="registro" element={<CheckIn />} />
+          <Route path="reservas" element={<Reservas />} />
           <Route path="salidas" element={<CheckOut />} />
           <Route path="monitor" element={<Monitor />} />
           <Route path="limpieza" element={<GestionLimpieza />} />

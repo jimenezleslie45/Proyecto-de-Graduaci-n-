@@ -17,6 +17,7 @@ const mantenimientoRoutes = require('./src/routes/mantenimiento.routes');
 const reportesRoutes = require('./src/routes/reportes.routes');
 const usuariosRoutes = require('./src/routes/usuarios.routes');
 const facturaRoutes = require('./src/routes/factura.routes');
+const reservaRoutes = require('./src/routes/reserva.routes');
 
 // Initialize Express app
 const app = express();
@@ -47,6 +48,7 @@ app.use('/api/mantenimiento', mantenimientoRoutes);
 app.use('/api/reportes', reportesRoutes);
 app.use('/api/usuarios', usuariosRoutes);
 app.use('/api/facturas', facturaRoutes);
+app.use('/api/reservas', reservaRoutes);
 
 // 404 handler
 app.use((req, res) => {

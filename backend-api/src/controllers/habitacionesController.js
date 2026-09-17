@@ -271,9 +271,23 @@ const create = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Ya existe una habitación con ese número en el hotel' });
     }
 
+    if (nuevaCapacidad != null || nuevaTarifa != null) {
+      const updateTipoQuery = `
+        UPDATE tipo_habitacion
+        SET capacidad = @capacidad,
+            tarifa_base = @tarifa_base
+        WHERE id_tipo = @id_tipo
+      `;
+      await db.query(updateTipoQuery, {
+        id_tipo: nuevoTipo,
+        capacidad: nuevaCapacidad ?? 0,
+        tarifa_base: nuevaTarifa ?? 0
+      });
+    }
+
     const query = `
-      INSERT INTO habitacion (id_hotel, id_tipo, numero, piso, estado_actual, capacidad, tarifa_base)
-      VALUES (1, @id_tipo, @numero, @piso, @id_estado_actual, @capacidad, @tarifa_base);
+      INSERT INTO habitacion (id_hotel, id_tipo, numero, piso, id_estado_actual)
+      VALUES (1, @id_tipo, @numero, @piso, @id_estado_actual);
       SELECT SCOPE_IDENTITY() as id;
     `;
     
@@ -281,9 +295,7 @@ const create = async (req, res) => {
       numero: nuevoNumero, 
       piso: nuevoPiso, 
       id_tipo: nuevoTipo,
-      id_estado_actual: nuevoEstado,
-      capacidad: nuevaCapacidad,
-      tarifa_base: nuevaTarifa
+      id_estado_actual: nuevoEstado
     });
     
     res.status(201).json({ 
@@ -344,10 +356,23 @@ const update = async (req, res) => {
       }
     }
 
+    if (nuevoTipo && (nuevaCapacidad != null || nuevaTarifa != null)) {
+      const updateTipoQuery = `
+        UPDATE tipo_habitacion
+        SET capacidad = @capacidad,
+            tarifa_base = @tarifa_base
+        WHERE id_tipo = @id_tipo
+      `;
+      await db.query(updateTipoQuery, {
+        id_tipo: nuevoTipo,
+        capacidad: nuevaCapacidad ?? 0,
+        tarifa_base: nuevaTarifa ?? 0
+      });
+    }
+
     const query = `
       UPDATE habitacion 
-      SET numero = @numero, piso = @piso, id_tipo = @id_tipo_habitacion, id_estado_actual = @id_estado_actual,
-          capacidad = @capacidad, tarifa_base = @tarifa_base
+      SET numero = @numero, piso = @piso, id_tipo = @id_tipo_habitacion, id_estado_actual = @id_estado_actual
       WHERE id_habitacion = @id
     `;
     
@@ -356,9 +381,7 @@ const update = async (req, res) => {
       numero: nuevoNumero ?? '', 
       piso: nuevoPiso ?? 0, 
       id_tipo_habitacion: nuevoTipo ?? 0, 
-      id_estado_actual: nuevoEstado ?? 0,
-      capacidad: nuevaCapacidad,
-      tarifa_base: nuevaTarifa
+      id_estado_actual: nuevoEstado ?? 0
     });
     
     res.json({ success: true, message: 'Habitación actualizada exitosamente' });

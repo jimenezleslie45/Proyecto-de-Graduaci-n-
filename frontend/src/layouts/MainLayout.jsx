@@ -11,7 +11,8 @@ import {
   FileBarChart,
   Users,
   Play,
-  Menu
+  Menu,
+  CalendarRange
 } from 'lucide-react'
 
 import { useState, useEffect } from 'react'
@@ -22,14 +23,17 @@ const navigation = [
   // 1) Panel (Dashboard visual) - Admin, Recepcionista
   { name: 'Panel', href: '/panel', icon: LayoutDashboard, roles: ['recepcion', 'admin'] },
 
-  // 2) Gestión de Habitaciones - Admin, Recepcionista
-  { name: 'Habitaciones', href: '/habitaciones', icon: DoorOpen, roles: ['admin', 'recepcion'] },
-
-  // 3) Registro de Check-in - Admin, Recepcionista
+  // 2) Registro de Check-in - Admin, Recepcionista
   { name: 'Registro', href: '/registro', icon: LogIn, roles: ['recepcion', 'admin'] },
+
+  // 3) Reservas - Admin, Recepcionista
+  { name: 'Reservas', href: '/reservas', icon: CalendarRange, roles: ['recepcion', 'admin'] },
 
   // 4) Registro de Check-out - Admin, Recepcionista
   { name: 'Salidas', href: '/salidas', icon: LogOut, roles: ['recepcion', 'admin'] },
+
+  // 5) Gestión de Habitaciones - Admin, Recepcionista
+  { name: 'Habitaciones', href: '/habitaciones', icon: DoorOpen, roles: ['admin', 'recepcion'] },
 
   // 5) Monitor de Estados - Todos los roles
   { name: 'Monitor', href: '/monitor', icon: Monitor, roles: ['recepcion', 'limpieza', 'mantenimiento', 'admin'] },
@@ -98,7 +102,7 @@ const MainLayout = () => {
   });
 
 return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-100 via-slate-200/70 to-slate-300/60 backdrop-blur-xl">
+    <div className="min-h-screen bg-gradient-to-br from-[#f8f3e7] via-[#e8ddbc] to-[#cba96d]/30 backdrop-blur-xl">
 
       {/* MOBILE SIDEBAR */}
 
@@ -185,26 +189,26 @@ return (
 }
 
 const SidebarContent = ({ navigation }) => (
-<div className="flex h-full flex-col bg-gradient-to-b from-blue-900/70 via-blue-950/70 to-indigo-950/70 backdrop-blur-xl border-r border-blue-400/40 shadow-[0_0_70px_rgba(37,99,235,0.25)]">
+<div className="flex h-full flex-col bg-gradient-to-b from-[#173f62] via-[#123b63] to-[#0d2d4f] backdrop-blur-xl border-r border-[#8acaff]/50 shadow-[0_0_70px_rgba(37,99,235,0.25)]">
 
     {/* TOP BRAND */}
     <div className="px-6 pt-5 pb-3">
       <div className="flex items-center gap-4">
-        <div className="h-14 w-14 rounded-3xl bg-gradient-to-br from-blue-600 via-blue-700 to-blue-900 flex items-center justify-center shadow-[0_20px_50px_rgba(37,99,235,0.35)]">
-          <div className="h-10 w-10 rounded-2xl bg-white/80 flex items-center justify-center shadow-inner shadow-blue-900/40">
+        <div className="h-14 w-14 rounded-3xl bg-gradient-to-br from-[#285a81] via-[#123b63] to-[#071a2d] flex items-center justify-center shadow-[0_20px_50px_rgba(37,99,235,0.35)]">
+          <div className="h-10 w-10 rounded-2xl bg-white/80 flex items-center justify-center shadow-inner shadow-[#092143]/40">
             <span className="text-2xl">🏨</span>
           </div>
         </div>
 
         <div className="text-white">
           <div className="text-lg font-bold leading-tight text-white">HOTEL LOS ARCOS</div>
-          <div className="text-xs text-blue-200 mt-1">Sistema Administrativo</div>
+          <div className="text-xs text-blue-100 mt-1">Sistema Administrativo</div>
         </div>
       </div>
     </div>
 
     <div className="px-4 pb-2">
-      <div className="rounded-xl bg-white/20 backdrop-blur-md p-2 text-blue-50 text-sm shadow-sm ring-1 ring-white/30">Bienvenido</div>
+      <div className="rounded-xl bg-white/15 backdrop-blur-md p-2 text-blue-50 text-sm shadow-sm ring-1 ring-white/20">Bienvenido</div>
     </div>
 
     {/* NAVIGATION */}
@@ -216,26 +220,26 @@ const SidebarContent = ({ navigation }) => (
           className={({ isActive }) =>
             `group flex items-center gap-4 rounded-2xl px-4 py-3 text-sm font-semibold transition-all duration-300 transform ${
               isActive
-                ? 'bg-white text-black border-l-4 border-blue-500 shadow-[0_12px_30px_rgba(37,99,235,0.35)] scale-[1.01]'
-                : 'text-black hover:bg-white hover:text-black hover:translate-x-1'
+                ? 'bg-white text-[#123b63] border-l-4 border-[#8acaff] shadow-[0_12px_30px_rgba(37,99,235,0.35)] scale-[1.01]'
+                : 'text-blue-50 hover:bg-white hover:text-[#123b63] hover:translate-x-1'
             }`
           }
         >
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-black/5 group-hover:bg-black/5 transition">
-            <item.icon className="h-5 w-5 text-slate-700" />
+            <item.icon className="h-5 w-5 text-blue-100 group-hover:text-[#123b63]" />
           </div>
 
           <span className="tracking-wide flex-1">{item.name}</span>
 
           {/* subtle chevron for active */}
-          <div className="opacity-0 group-hover:opacity-100 transition text-blue-500">›</div>
+          <div className="opacity-0 group-hover:opacity-100 transition text-blue-200">›</div>
         </NavLink>
       ))}
     </nav>
 
     {/* FOOTER */}
     <div className="px-4 pb-4 pt-2">
-      <div className="flex items-center justify-between gap-3 bg-white/15 backdrop-blur-md p-2 rounded-xl">
+      <div className="flex items-center justify-between gap-3 bg-white/10 backdrop-blur-md p-2 rounded-xl">
         <div className="text-sm text-blue-100">Hotel System</div>
         <div className="text-xs text-blue-200/80">v1.0</div>
       </div>

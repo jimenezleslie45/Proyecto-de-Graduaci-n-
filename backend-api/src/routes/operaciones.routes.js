@@ -33,6 +33,9 @@ router.get('/checkout', authenticate, canPerformOperations, checkoutController.g
 // GET /api/operaciones/checkout/:id - Get check-out by ID
 router.get('/checkout/:id', authenticate, canPerformOperations, commonRules.id, validate, checkoutController.getById);
 
+// PUT /api/operaciones/checkin/:id/extender - Extend stay
+router.put('/checkin/:id/extender', authenticate, canPerformOperations, checkoutController.extenderEstadia);
+
 // PUT /api/operaciones/checkout/:id - Perform check-out
 router.put('/checkout/:id', authenticate, canPerformOperations, checkoutRules.update, validate, checkoutController.checkout);
 

@@ -3,7 +3,6 @@ import api from '../services/api'
 import toast from 'react-hot-toast'
 import {
   Search,
-  DollarSign,
   Download,
   LogOut,
   Calendar,
@@ -18,63 +17,72 @@ import {
   Clock,
   Calculator
 } from 'lucide-react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion } from 'framer-motion'
 
 const METODOS_PAGO = ['Efectivo', 'Tarjeta', 'Transferencia']
-const IMPUESTO = 0.13 // 13%
+const IMPUESTO = 0.13
 
 const CheckOut = () => {
   const [estadasActivas, setEstadasActivas] = useState([])
+  const [historialFacturas, setHistorialFacturas] = useState([])
   const [loading, setLoading] = useState(true)
   const [selectedEstadia, setSelectedEstadia] = useState(null)
   const [searchTerm, setSearchTerm] = useState('')
-  const [historialFacturas, setHistorialFacturas] = useState([])
   const [procesando, setProcesando] = useState(false)
+  const [extending, setExtending] = useState(false)
+  const [showExtender, setShowExtender] = useState(false)
+  const [nuevaFechaSalida, setNuevaFechaSalida] = useState('')
 
   const [formData, setFormData] = useState({
     fecha_salida: '',
     hora_salida: '',
-    metodo_pago: 'Efectivo',
+    metodo_pago: '',
     referencia: '',
     numero_factura: '',
     genera_factura: true,
     observaciones: ''
   })
+
   const [cargos, setCargos] = useState([])
 
   useEffect(() => {
     fetchEstadasActivas()
+    fetchFacturas()
   }, [])
 
   const fetchEstadasActivas = async () => {
     try {
       const response = await api.get('/operaciones/checkin')
-      const facturasRes = await api.get('/facturas')
-      setEstadasActivas(response.data.data || response.data)
-      setHistorialFacturas(facturasRes.data.data || [])
+      setEstadasActivas(response.data.data || response.data || [])
     } catch (error) {
       console.error('Error:', error)
-      toast.error('Error al cargar estadías activas')
+      setEstadasActivas([])
+    }
+  }
+
+  const fetchFacturas = async () => {
+    try {
+      const response = await api.get('/facturas')
+      setHistorialFacturas(response.data.data || response.data || [])
+    } catch (error) {
+      console.error('Error:', error)
+      setHistorialFacturas([])
     } finally {
       setLoading(false)
     }
   }
 
-  // Filtrar en tiempo real por habitación O huésped
   const filteredEstadias = useMemo(() => {
     const term = searchTerm.trim().toLowerCase()
     if (!term) return estadasActivas
+
     return estadasActivas.filter((e) => {
       const habitacion = String(e.numero_habitacion || '').toLowerCase()
       const nombre = `${e.nombres || ''} ${e.apellidos || ''}`.toLowerCase()
-      const documento = String(e.numero_documento || e.numero_documento || '').toLowerCase()
+      const documento = String(e.numero_documento || '').toLowerCase()
       const numeroEstadia = String(e.numero_estadia || e.id || '').toLowerCase()
-      return (
-        habitacion.includes(term) ||
-        nombre.includes(term) ||
-        documento.includes(term) ||
-        numeroEstadia.includes(term)
-      )
+
+      return habitacion.includes(term) || nombre.includes(term) || documento.includes(term) || numeroEstadia.includes(term)
     })
   }, [estadasActivas, searchTerm])
 
@@ -82,11 +90,9 @@ const CheckOut = () => {
     setSelectedEstadia(estadia)
     setCargos([])
     setFormData({
-      fecha_salida: estadia.fecha_checkout_prevista
-        ? estadia.fecha_checkout_prevista.slice(0, 10)
-        : new Date().toISOString().slice(0, 10),
-      hora_salida: new Date().toTimeString().slice(0, 5),
-      metodo_pago: 'Efectivo',
+      fecha_salida: '',
+      hora_salida: '',
+      metodo_pago: '',
       referencia: '',
       numero_factura: '',
       genera_factura: true,
@@ -94,12 +100,8 @@ const CheckOut = () => {
     })
   }
 
-  // Cargos adicionales
   const agregarCargo = (tipo) => {
-    setCargos([
-      ...cargos,
-      { id: Date.now(), tipo, descripcion: '', cantidad: 1, precio: 0 }
-    ])
+    setCargos([...cargos, { id: Date.now(), tipo, descripcion: '', cantidad: '', precio: '' }])
   }
 
   const actualizarCargo = (id, campo, valor) => {
@@ -110,22 +112,19 @@ const CheckOut = () => {
     setCargos(cargos.filter((c) => c.id !== id))
   }
 
-  // Cálculo de noches basado en fecha de salida real
   const calcularNoches = () => {
     if (!selectedEstadia?.fecha_checkin) return 1
+
     const checkin = new Date(selectedEstadia.fecha_checkin)
     const checkout = formData.fecha_salida
       ? new Date(`${formData.fecha_salida}T${formData.hora_salida || '12:00'}`)
-      : new Date()
+      : new Date(selectedEstadia.fecha_checkout_prevista || selectedEstadia.fecha_checkin)
+
     const diff = Math.round((checkout - checkin) / 86400000)
     return Math.max(1, diff)
   }
 
-  const getPrecioNoche = () =>
-    selectedEstadia?.precio_noche ??
-    selectedEstadia?.total_cargo ??
-    selectedEstadia?.precio ??
-    0
+  const getPrecioNoche = () => selectedEstadia?.precio_noche ?? selectedEstadia?.precio ?? 0
 
   const calcularSubtotalAlojamiento = () => {
     if (!selectedEstadia) return 0
@@ -141,9 +140,7 @@ const CheckOut = () => {
 
   const descargarPDF = async (idFactura) => {
     try {
-      const response = await api.get(`/facturas/${idFactura}/descargar`, {
-        responseType: 'blob'
-      })
+      const response = await api.get(`/facturas/${idFactura}/descargar`, { responseType: 'blob' })
       const url = window.URL.createObjectURL(new Blob([response.data]))
       const link = document.createElement('a')
       link.href = url
@@ -158,6 +155,29 @@ const CheckOut = () => {
     }
   }
 
+  const extenderEstadia = async () => {
+    if (!selectedEstadia || !nuevaFechaSalida) {
+      toast.error('Seleccione una estadía y una nueva fecha de salida')
+      return
+    }
+
+    setExtending(true)
+    try {
+      const idEstadia = selectedEstadia.id_estadia || selectedEstadia.id
+      await api.put(`/operaciones/checkin/${idEstadia}/extender`, {
+        nueva_fecha_check_out: nuevaFechaSalida
+      })
+      toast.success('Estadía extendida correctamente')
+      setShowExtender(false)
+      setNuevaFechaSalida('')
+      await fetchEstadasActivas()
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Error al extender la estadía')
+    } finally {
+      setExtending(false)
+    }
+  }
+
   const registrarCheckout = async (e) => {
     e.preventDefault()
     if (!selectedEstadia) {
@@ -167,7 +187,6 @@ const CheckOut = () => {
 
     setProcesando(true)
     const idEstadia = selectedEstadia.id_estadia || selectedEstadia.id
-
     const cargosDetalle = cargos
       .filter((c) => c.descripcion.trim() && Number(c.precio) > 0)
       .map((c) => ({
@@ -177,7 +196,6 @@ const CheckOut = () => {
       }))
 
     try {
-      // 1. Registrar el check-out (automatiza estado a limpieza + tarea de limpieza)
       const checkoutPayload = {
         metodo_pago: formData.metodo_pago,
         referencia: formData.referencia,
@@ -189,10 +207,10 @@ const CheckOut = () => {
         numero_factura: formData.numero_factura,
         total: Number(total.toFixed(2))
       }
+
       await api.put(`/operaciones/checkout/${idEstadia}`, checkoutPayload)
       toast.success('Check-out registrado. Habitación enviada a limpieza y tarea creada.')
 
-      // 2. Generar factura si está marcado
       let idFacturaGenerada = null
       if (formData.genera_factura) {
         const facturaPayload = {
@@ -216,25 +234,27 @@ const CheckOut = () => {
             }))
           ]
         }
+
         const response = await api.post('/facturas', facturaPayload)
         idFacturaGenerada = response.data.data?.id_factura
         toast.success(`Factura #${idFacturaGenerada} generada correctamente`)
       }
 
-      // Reset
       setSelectedEstadia(null)
       setCargos([])
       setSearchTerm('')
       setFormData({
         fecha_salida: '',
         hora_salida: '',
-        metodo_pago: 'Efectivo',
+        metodo_pago: '',
         referencia: '',
         numero_factura: '',
         genera_factura: true,
         observaciones: ''
       })
+
       await fetchEstadasActivas()
+      await fetchFacturas()
 
       if (idFacturaGenerada) {
         descargarPDF(idFacturaGenerada)
@@ -246,13 +266,6 @@ const CheckOut = () => {
     }
   }
 
-  const filteredFacturas = historialFacturas.filter(
-    (factura) =>
-      (factura.nombre_cliente &&
-        factura.nombre_cliente.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (factura.id_factura && factura.id_factura.toString().includes(searchTerm))
-  )
-
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -263,383 +276,178 @@ const CheckOut = () => {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Título */}
       <div className="flex items-center gap-3">
         <div className="p-3 rounded-xl bg-primary-100 text-primary-700">
           <LogOut className="w-6 h-6" />
         </div>
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Registro de Salidas</h1>
-          <p className="text-gray-500">Registrar check-out de huéspedes y generar facturación</p>
+          <h1 className="text-2xl font-bold text-gray-900"># Registro de Check-out</h1>
+          <p className="text-gray-500">Búsqueda de huésped o habitación activa</p>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Estadías activas */}
-        <div className="card">
-          <div className="flex items-center gap-2 mb-4">
-            <Search className="w-5 h-5 text-primary-600" />
-            <h2 className="text-lg font-semibold">Buscador de Estadía Activa</h2>
-          </div>
-          <p className="text-sm text-gray-500 mb-3">
-            Busque por habitación, huésped, documento o número de estadía
-          </p>
-          <div className="relative mb-4">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Habitación, huésped o documento..."
-              className="input pl-10"
-            />
-          </div>
-
-          <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
-            {filteredEstadias.map((estadia) => (
-              <motion.div
-                key={estadia.id_estadia || estadia.id}
-                whileHover={{ scale: 1.01 }}
-                whileTap={{ scale: 0.99 }}
-                onClick={() => selectEstadia(estadia)}
-                className={`p-3 border rounded-lg cursor-pointer transition-all ${
-                  selectedEstadia?.id_estadia === estadia.id_estadia ||
-                  selectedEstadia?.id === estadia.id
-                    ? 'border-primary-500 bg-primary-50 shadow-sm'
-                    : 'border-gray-200 hover:border-primary-300 hover:bg-gray-50'
-                }`}
-              >
-                <div className="flex justify-between items-center mb-2">
-                  <div className="flex items-center gap-2">
-                    <BedDouble className="w-4 h-4 text-gray-400" />
-                    <p className="font-medium">Habitación {estadia.numero_habitacion}</p>
-                  </div>
-                  <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs font-medium rounded-full">
-                    Activa
-                  </span>
-                </div>
-                <div className="flex items-center gap-2 text-sm text-gray-600 mb-2">
-                  <User className="w-4 h-4 text-gray-400" />
-                  {`${estadia.nombres || ''} ${estadia.apellidos || ''}`.trim() ||
-                    'Huésped sin nombre'}
-                </div>
-                <div className="grid grid-cols-2 gap-2 text-xs text-gray-500">
-                  <div className="flex items-center gap-1">
-                    <Calendar className="w-3 h-3" />
-                    Ingreso: {new Date(estadia.fecha_checkin).toLocaleDateString()}
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Clock className="w-3 h-3" />
-                    Salida: {new Date(estadia.fecha_checkout_prevista).toLocaleDateString()}
-                  </div>
-                </div>
-              </motion.div>
-            ))}
-            {filteredEstadias.length === 0 && (
-              <p className="text-gray-500 text-center py-4">
-                {searchTerm ? 'Sin resultados para la búsqueda' : 'No hay estadías activas'}
-              </p>
-            )}
-          </div>
+      <section className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+        <div className="flex items-center gap-3 p-4 border-b bg-gray-50">
+          <Search className="w-5 h-5 text-gray-400" />
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="Buscar huésped o habitación"
+            className="w-full border-0 bg-transparent outline-none placeholder:text-gray-400"
+          />
         </div>
 
-        {/* Detalles / Formulario de check-out */}
-        <div className="card">
-          <div className="flex items-center gap-2 mb-4">
-            <LogOut className="w-5 h-5 text-primary-600" />
-            <h2 className="text-lg font-semibold">Registrar Check-out</h2>
-          </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 p-5">
+          <div className="space-y-4">
+            <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+              <div className="font-semibold text-gray-900 mb-3">Información del Huésped</div>
+              <div className="space-y-2 text-sm">
+                {selectedEstadia ? (
+                  <>
+                    <div><span className="font-medium text-gray-700">Nombre:</span> <span className="text-gray-900">{`${selectedEstadia.nombres || ''} ${selectedEstadia.apellidos || ''}`.trim() || ''}</span></div>
+                    <div><span className="font-medium text-gray-700">Documento:</span> <span className="text-gray-900">{selectedEstadia.numero_documento || ''}</span></div>
+                    <div><span className="font-medium text-gray-700">Contacto:</span> <span className="text-gray-900">{selectedEstadia.telefono || selectedEstadia.contacto || ''}</span></div>
+                  </>
+                ) : (
+                  <>
+                    <div><span className="font-medium text-gray-700">Nombre:</span> <span className="text-gray-500">&nbsp;</span></div>
+                    <div><span className="font-medium text-gray-700">Documento:</span> <span className="text-gray-500">&nbsp;</span></div>
+                    <div><span className="font-medium text-gray-700">Contacto:</span> <span className="text-gray-500">&nbsp;</span></div>
+                  </>
+                )}
+              </div>
+            </div>
 
-          {selectedEstadia ? (
-            <form onSubmit={registrarCheckout} className="space-y-4">
-              {/* Card resumen estadía */}
-              <div className="rounded-xl border border-primary-200 bg-primary-50/50 p-4 space-y-3">
-                <div className="flex items-center gap-2">
-                  <BedDouble className="w-5 h-5 text-primary-700" />
-                  <p className="font-semibold text-primary-800">
-                    Habitación {selectedEstadia.numero_habitacion}
-                  </p>
-                </div>
-                <div className="grid grid-cols-2 gap-3 text-sm text-primary-700">
-                  <div>
-                    <p className="font-medium">Huésped</p>
-                    <p>{`${selectedEstadia.nombres || ''} ${selectedEstadia.apellidos || ''}`.trim()}</p>
-                  </div>
-                  <div>
-                    <p className="font-medium">Documento</p>
-                    <p>{selectedEstadia.numero_documento || '-'}</p>
-                  </div>
-                  <div>
-                    <p className="font-medium">Ingreso</p>
-                    <p>{new Date(selectedEstadia.fecha_checkin).toLocaleDateString()}</p>
-                  </div>
-                  <div>
-                    <p className="font-medium">Salida prevista</p>
-                    <p>{new Date(selectedEstadia.fecha_checkout_prevista).toLocaleDateString()}</p>
-                  </div>
-                  <div>
-                    <p className="font-medium">Noches</p>
-                    <p>{calcularNoches()}</p>
-                  </div>
-                  <div>
-                    <p className="font-medium">Precio/noche</p>
-                    <p>${getPrecioNoche()}</p>
-                  </div>
-                </div>
+            <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+              <div className="font-semibold text-gray-900 mb-3">Detalles de la Estancia</div>
+              <div className="space-y-2 text-sm">
+                {selectedEstadia ? (
+                  <>
+                    <div><span className="font-medium text-gray-700">Check-in:</span> <span className="text-gray-900">{selectedEstadia.fecha_checkin ? new Date(selectedEstadia.fecha_checkin).toLocaleDateString() : ''}</span></div>
+                    <div><span className="font-medium text-gray-700">Check-out:</span> <span className="text-gray-900">{selectedEstadia.fecha_checkout_prevista ? new Date(selectedEstadia.fecha_checkout_prevista).toLocaleDateString() : ''}</span></div>
+                    <div><span className="font-medium text-gray-700">Noches:</span> <span className="text-gray-900">{calcularNoches()}</span></div>
+                  </>
+                ) : (
+                  <>
+                    <div><span className="font-medium text-gray-700">Check-in:</span> <span className="text-gray-500">&nbsp;</span></div>
+                    <div><span className="font-medium text-gray-700">Check-out:</span> <span className="text-gray-500">&nbsp;</span></div>
+                    <div><span className="font-medium text-gray-700">Noches:</span> <span className="text-gray-500">&nbsp;</span></div>
+                  </>
+                )}
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+              <div className="font-semibold text-gray-900 mb-3">Cargos Adicionales</div>
+              <div className="space-y-2">
+                {cargos.length === 0 ? (
+                  <div className="text-sm text-gray-400 py-2">Sin cargos adicionales</div>
+                ) : (
+                  cargos.map((cargo) => (
+                    <div key={cargo.id} className="grid grid-cols-12 gap-2 items-center">
+                      <div className="col-span-4">
+                        <input type="text" value={cargo.descripcion || ''} onChange={(e) => actualizarCargo(cargo.id, 'descripcion', e.target.value)} placeholder="" className="input text-sm" />
+                      </div>
+                      <div className="col-span-3">
+                        <input type="number" value={cargo.cantidad || ''} min="1" onChange={(e) => actualizarCargo(cargo.id, 'cantidad', e.target.value)} className="input text-sm" />
+                      </div>
+                      <div className="col-span-3">
+                        <input type="number" value={cargo.precio || ''} min="0" step="0.01" onChange={(e) => actualizarCargo(cargo.id, 'precio', e.target.value)} placeholder="" className="input text-sm" />
+                      </div>
+                      <div className="col-span-1 text-right">
+                        <button type="button" onClick={() => eliminarCargo(cargo.id)} className="p-1 text-red-500 hover:bg-red-50 rounded"><Trash2 className="w-4 h-4" /></button>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
 
-              {/* Fecha/hora de salida */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="label flex items-center gap-1">
-                    <Calendar className="w-4 h-4 text-primary-600" />
-                    Fecha de Salida
-                  </label>
+              <div className="flex gap-2 mt-3">
+                <button type="button" onClick={() => agregarCargo('Minibar')} className="btn btn-secondary btn-sm flex items-center gap-1"><Wine className="w-4 h-4" />Minibar</button>
+                <button type="button" onClick={() => agregarCargo('Servicio')} className="btn btn-secondary btn-sm flex items-center gap-1"><BellRing className="w-4 h-4" />Servicio</button>
+                <button type="button" onClick={() => agregarCargo('Otros')} className="btn btn-secondary btn-sm flex items-center gap-1"><Plus className="w-4 h-4" />Otro</button>
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+              <div className="font-semibold text-gray-900 mb-3">Información de la Habitación</div>
+              <div className="space-y-2 text-sm">
+                {selectedEstadia ? (
+                  <>
+                    <div><span className="font-medium text-gray-700">Número:</span> <span className="text-gray-900">{selectedEstadia.numero_habitacion || ''}</span></div>
+                    <div><span className="font-medium text-gray-700">Tipo:</span> <span className="text-gray-900">{selectedEstadia.tipo_habitacion || ''}</span></div>
+                    <div><span className="font-medium text-gray-700">Piso:</span> <span className="text-gray-900">{selectedEstadia.piso || ''}</span></div>
+                  </>
+                ) : (
+                  <>
+                    <div><span className="font-medium text-gray-700">Número:</span> <span className="text-gray-500">&nbsp;</span></div>
+                    <div><span className="font-medium text-gray-700">Tipo:</span> <span className="text-gray-500">&nbsp;</span></div>
+                    <div><span className="font-medium text-gray-700">Piso:</span> <span className="text-gray-500">&nbsp;</span></div>
+                  </>
+                )}
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+              <div className="font-semibold text-gray-900 mb-3">Método de Pago</div>
+              <select value={formData.metodo_pago} onChange={(e) => setFormData({ ...formData, metodo_pago: e.target.value })} className="input">
+                <option value="">Seleccione</option>
+                {METODOS_PAGO.map((m) => <option key={m}>{m}</option>)}
+              </select>
+            </div>
+
+            <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+              <div className="font-semibold text-gray-900 mb-3">Número de Factura</div>
+              <input type="text" value={formData.numero_factura} onChange={(e) => setFormData({ ...formData, numero_factura: e.target.value })} placeholder="" className="input" />
+            </div>
+
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+              <div className="font-semibold text-amber-800 mb-2 flex items-center gap-2"><Calculator className="w-5 h-5" />Cálculo del Total</div>
+              <div className="space-y-1 text-sm text-amber-700">
+                <div className="flex justify-between"><span>Alojamiento ({calcularNoches()} noche(s) × Q{getPrecioNoche()})</span><span>Q{calcularSubtotalAlojamiento().toFixed(2)}</span></div>
+                <div className="flex justify-between"><span>Cargos adicionales</span><span>Q{calcularSubtotalCargos().toFixed(2)}</span></div>
+                <div className="flex justify-between"><span>Impuesto ({IMPUESTO * 100}%)</span><span>Q{impuesto.toFixed(2)}</span></div>
+                <div className="flex justify-between font-bold text-amber-900 mt-2 pt-2 border-t border-amber-200 text-base">
+                  <span>Total a pagar</span>
+                  <span>Q{total.toFixed(2)}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <button type="button" onClick={registrarCheckout} className="btn btn-primary w-full flex items-center justify-center gap-2 py-3 text-base">
+                <LogOut className="w-5 h-5" />
+                Registrar Check-out
+              </button>
+
+              <button type="button" onClick={() => setShowExtender((prev) => !prev)} className="btn btn-secondary w-full flex items-center justify-center gap-2 py-3 text-base">
+                <Calendar className="w-5 h-5" />
+                Extender estadía
+              </button>
+
+              {showExtender && (
+                <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 space-y-3">
+                  <label className="block text-sm font-semibold text-gray-700">Nueva fecha de salida</label>
                   <input
                     type="date"
-                    value={formData.fecha_salida}
-                    onChange={(e) => setFormData({ ...formData, fecha_salida: e.target.value })}
+                    value={nuevaFechaSalida}
+                    onChange={(e) => setNuevaFechaSalida(e.target.value)}
                     className="input"
-                    required
                   />
+                  <button type="button" onClick={extenderEstadia} disabled={extending} className="btn btn-primary w-full">
+                    {extending ? 'Extending...' : 'Confirmar extensión'}
+                  </button>
                 </div>
-                <div>
-                  <label className="label flex items-center gap-1">
-                    <Clock className="w-4 h-4 text-primary-600" />
-                    Hora de Salida
-                  </label>
-                  <input
-                    type="time"
-                    value={formData.hora_salida}
-                    onChange={(e) => setFormData({ ...formData, hora_salida: e.target.value })}
-                    className="input"
-                    required
-                  />
-                </div>
-              </div>
-
-              {/* Cargos adicionales */}
-              <div className="rounded-xl border border-gray-200 p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <p className="font-semibold flex items-center gap-2">
-                    <Receipt className="w-5 h-5 text-primary-600" />
-                    Cargos Adicionales
-                  </p>
-                  <div className="flex gap-2">
-                    <motion.button
-                      type="button"
-                      whileTap={{ scale: 0.95 }}
-                      onClick={() => agregarCargo('Minibar')}
-                      className="btn btn-secondary btn-sm flex items-center gap-1"
-                    >
-                      <Wine className="w-4 h-4" /> Minibar
-                    </motion.button>
-                    <motion.button
-                      type="button"
-                      whileTap={{ scale: 0.95 }}
-                      onClick={() => agregarCargo('Servicio a habitación')}
-                      className="btn btn-secondary btn-sm flex items-center gap-1"
-                    >
-                      <BellRing className="w-4 h-4" /> Servicio
-                    </motion.button>
-                    <motion.button
-                      type="button"
-                      whileTap={{ scale: 0.95 }}
-                      onClick={() => agregarCargo('Otros')}
-                      className="btn btn-secondary btn-sm flex items-center gap-1"
-                    >
-                      <Plus className="w-4 h-4" /> Otros
-                    </motion.button>
-                  </div>
-                </div>
-
-                {cargos.length === 0 ? (
-                  <p className="text-sm text-gray-400 text-center py-2">
-                    Sin cargos adicionales registrados
-                  </p>
-                ) : (
-                  <div className="space-y-2">
-                    {cargos.map((cargo) => (
-                      <div key={cargo.id} className="grid grid-cols-12 gap-2 items-center">
-                        <div className="col-span-4">
-                          <input
-                            type="text"
-                            value={cargo.descripcion || cargo.tipo}
-                            onChange={(e) =>
-                              actualizarCargo(cargo.id, 'descripcion', e.target.value)
-                            }
-                            placeholder={cargo.tipo}
-                            className="input text-sm"
-                          />
-                        </div>
-                        <div className="col-span-2">
-                          <input
-                            type="number"
-                            value={cargo.cantidad}
-                            min="1"
-                            onChange={(e) =>
-                              actualizarCargo(cargo.id, 'cantidad', e.target.value)
-                            }
-                            className="input text-sm"
-                          />
-                        </div>
-                        <div className="col-span-3">
-                          <input
-                            type="number"
-                            value={cargo.precio}
-                            min="0"
-                            step="0.01"
-                            onChange={(e) =>
-                              actualizarCargo(cargo.id, 'precio', e.target.value)
-                            }
-                            placeholder="0.00"
-                            className="input text-sm"
-                          />
-                        </div>
-                        <div className="col-span-2 text-right text-sm font-medium">
-                          ${((Number(cargo.cantidad) || 0) * (Number(cargo.precio) || 0)).toFixed(2)}
-                        </div>
-                        <div className="col-span-1 text-right">
-                          <button
-                            type="button"
-                            onClick={() => eliminarCargo(cargo.id)}
-                            className="p-1 text-red-500 hover:bg-red-50 rounded"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Cálculo automático del total */}
-              <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
-                <p className="font-semibold text-amber-800 flex items-center gap-2 mb-2">
-                  <Calculator className="w-5 h-5" />
-                  Cálculo del Total
-                </p>
-                <div className="space-y-1 text-sm text-amber-700">
-                  <div className="flex justify-between">
-                    <span>Alojamiento ({calcularNoches()} noche(s) × ${getPrecioNoche()})</span>
-                    <span>${calcularSubtotalAlojamiento().toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Cargos adicionales</span>
-                    <span>${calcularSubtotalCargos().toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Impuesto ({IMPUESTO * 100}%)</span>
-                    <span>${impuesto.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between font-bold text-amber-900 mt-2 pt-2 border-t border-amber-200 text-base">
-                    <span>Total a pagar</span>
-                    <span>${total.toFixed(2)}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Método de pago */}
-              <div>
-                <label className="label flex items-center gap-1">
-                  <DollarSign className="w-4 h-4 text-primary-600" />
-                  Método de Pago
-                </label>
-                <div className="grid grid-cols-3 gap-2">
-                  {METODOS_PAGO.map((metodo) => (
-                    <button
-                      key={metodo}
-                      type="button"
-                      onClick={() => setFormData({ ...formData, metodo_pago: metodo })}
-                      className={`p-2 border-2 rounded-lg text-sm font-medium transition-all ${
-                        formData.metodo_pago === metodo
-                          ? 'border-primary-500 bg-primary-50 text-primary-700'
-                          : 'border-gray-200 text-gray-500 hover:border-primary-300'
-                      }`}
-                    >
-                      {metodo === 'Efectivo' && '💵'}
-                      {metodo === 'Tarjeta' && '💳'}
-                      {metodo === 'Transferencia' && '🏦'} {metodo}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <label className="label">Referencia (voucher/tarjeta)</label>
-                <input
-                  type="text"
-                  value={formData.referencia}
-                  onChange={(e) => setFormData({ ...formData, referencia: e.target.value })}
-                  className="input"
-                  placeholder="Número de voucher/tarjeta"
-                />
-              </div>
-
-              {/* Generar factura + número */}
-              <div className="rounded-xl border border-gray-200 p-4 space-y-3">
-                <label className="flex items-center gap-3 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={formData.genera_factura}
-                    onChange={(e) =>
-                      setFormData({ ...formData, genera_factura: e.target.checked })
-                    }
-                    className="w-5 h-5 text-primary-600 rounded border-gray-300 focus:ring-primary-500"
-                  />
-                  <span className="font-medium flex items-center gap-2">
-                    <FileText className="w-5 h-5 text-primary-600" />
-                    ¿Generar factura?
-                  </span>
-                </label>
-                {formData.genera_factura && (
-                  <div>
-                    <label className="label">Número de Factura</label>
-                    <input
-                      type="text"
-                      value={formData.numero_factura}
-                      onChange={(e) =>
-                        setFormData({ ...formData, numero_factura: e.target.value })
-                      }
-                      className="input"
-                      placeholder="N° de factura (opcional, se autogenera)"
-                    />
-                  </div>
-                )}
-              </div>
-
-              <div>
-                <label className="label">Observaciones</label>
-                <textarea
-                  value={formData.observaciones}
-                  onChange={(e) => setFormData({ ...formData, observaciones: e.target.value })}
-                  className="input"
-                  rows="2"
-                  placeholder="Notas sobre la salida..."
-                />
-              </div>
-
-              <button
-                type="submit"
-                disabled={procesando}
-                className="btn btn-primary w-full flex items-center justify-center gap-2 py-3 text-base"
-              >
-                <LogOut className="w-5 h-5" />
-                {procesando ? 'Procesando...' : 'Registrar Check-out'}
-              </button>
-            </form>
-          ) : (
-            <div className="text-center py-12 text-gray-500">
-              <LogOut className="w-12 h-12 mx-auto mb-3 text-gray-300" />
-              Seleccione una estadía activa para registrar el check-out
+              )}
             </div>
-          )}
+          </div>
         </div>
-      </div>
+      </section>
 
-      {/* Historial de Facturas */}
-      <div className="card">
+      <section className="card">
         <h2 className="text-lg font-semibold mb-4">Historial de Facturas</h2>
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
@@ -650,43 +458,34 @@ const CheckOut = () => {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Habitación</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fecha</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Monto Total</th>
-                <th className="relative px-6 py-3">
-                  <span className="sr-only">Acciones</span>
-                </th>
+                <th className="relative px-6 py-3"><span className="sr-only">Acciones</span></th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {filteredFacturas.map((factura) => (
-                <tr key={factura.id_factura} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">#{factura.id_factura}</td>
+              {historialFacturas.length === 0 && (
+                <tr>
+                  <td className="px-6 py-4 text-sm text-gray-500" colSpan="6">No hay facturas.</td>
+                </tr>
+              )}
+              {historialFacturas.map((factura) => (
+                <tr key={factura.id_factura || factura.id} className="hover:bg-gray-50">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">#{factura.id_factura || factura.id}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                    <div>{factura.nombre_cliente}</div>
-                    <div className="text-xs text-gray-500">{factura.documento_cliente}</div>
+                    <div>{factura.nombre_cliente || factura.cliente || 'Cliente'}</div>
+                    <div className="text-xs text-gray-500">{factura.documento_cliente || factura.documento || '-'}</div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{factura.numero_habitacion}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{new Date(factura.fecha_emision).toLocaleDateString()}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-800">${Number(factura.total).toFixed(2)}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{factura.numero_habitacion || factura.habitacion || '-'}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{factura.fecha_emision ? new Date(factura.fecha_emision).toLocaleDateString() : '-'}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-800">Q{Number(factura.total || 0).toFixed(2)}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <button
-                      type="button"
-                      onClick={() => descargarPDF(factura.id_factura)}
-                      className="btn btn-secondary btn-sm flex items-center gap-2"
-                    >
-                      <Download className="w-4 h-4" />
-                      PDF
-                    </button>
+                    <button type="button" onClick={() => descargarPDF(factura.id_factura || factura.id)} className="btn btn-secondary btn-sm flex items-center gap-2"><Download className="w-4 h-4" />PDF</button>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-        {filteredFacturas.length === 0 && (
-          <div className="text-center py-12">
-            <p className="text-gray-500">No se encontraron facturas.</p>
-          </div>
-        )}
-      </div>
+      </section>
     </div>
   )
 }

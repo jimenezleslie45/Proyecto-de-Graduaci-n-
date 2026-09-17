@@ -55,18 +55,16 @@ const Habitaciones = () => {
         numero: formData.numero,
         piso: parseInt(formData.piso),
         descripcion: formData.descripcion || '',
+        id_tipo_habitacion: parseInt(formData.id_tipo_habitacion),
+        id_estado_actual: parseInt(formData.id_estado),
         capacidad: formData.capacidad ? parseInt(formData.capacidad) : null,
         tarifa_base: formData.precio_base !== '' ? parseFloat(formData.precio_base) : null
       }
 
       if (editingHabitacion) {
-        payload.id_tipo_habitacion = parseInt(formData.id_tipo_habitacion)
-        payload.id_estado_actual = parseInt(formData.id_estado)
         await api.put(`/habitaciones/${editingHabitacion.id}`, payload)
         toast.success('Habitación actualizada')
       } else {
-        payload.id_tipo_habitacion = parseInt(formData.id_tipo_habitacion)
-        payload.id_estado_actual = parseInt(formData.id_estado)
         await api.post('/habitaciones', payload)
         toast.success('Habitación creada')
       }
@@ -280,7 +278,7 @@ const Habitaciones = () => {
                   </td>
                   <td className="px-4 py-3 text-gray-600">{getCapacidad(habitacion)}</td>
                   <td className="px-4 py-3 text-gray-600">
-                    {getTarifa(habitacion) !== '-' ? `$${Number(getTarifa(habitacion)).toFixed(2)}` : '-'}
+                    {getTarifa(habitacion) !== '-' ? `Q${Number(getTarifa(habitacion)).toFixed(2)}` : '-'}
                   </td>
                   <td className="px-4 py-3">
                     <span className={`px-2 py-1 rounded-full text-xs font-medium ${getEstadoColor(habitacion.estado)}`}>
@@ -391,7 +389,7 @@ const Habitaciones = () => {
                 />
               </div>
               <div>
-                <label className="label">Tarifa Base ($ por noche)</label>
+                <label className="label">Tarifa Base (Q por noche)</label>
                 <input
                   type="number"
                   value={formData.precio_base}
