@@ -44,7 +44,29 @@ const crearFactura = async (req, res) => {
 
     const idFactura = resultFactura.recordset[0].id_factura;
 
-    // 2. Insertar cada línea de detalle
+    // 2. Generar número de factura correlativo (FAC-0001, FAC-0002, ...)
+    const numeroFactura = `FAC-${String(idFactura).padStart(4, '0')}`;
+
+    // 2a. Intentar persistir numero_factura si la columna existe
+    try {
+      const colCheck = new mssql.Request(transaction);
+      const colResult = await colCheck.query(`
+        SELECT COUNT(*) as existe
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_NAME = 'factura' AND COLUMN_NAME = 'numero_factura'
+      `);
+      if (colResult.recordset[0].existe > 0) {
+        const updateReq = new mssql.Request(transaction);
+        await updateReq
+          .input('numero_factura', mssql.VarChar(20), numeroFactura)
+          .input('id_factura', mssql.Int, idFactura)
+          .query(`UPDATE dbo.factura SET numero_factura = @numero_factura WHERE id_factura = @id_factura`);
+      }
+    } catch (colError) {
+      logger.warn(`No se pudo persistir numero_factura: ${colError.message}`);
+    }
+
+    // 3. Insertar cada línea de detalle
     for (const detalle of detalles) {
       const detalleRequest = new mssql.Request(transaction);
       await detalleRequest
@@ -90,7 +112,7 @@ const crearFactura = async (req, res) => {
       message: email_cliente
         ? 'Factura creada, habitación actualizada y factura enviada al correo exitosamente.'
         : 'Factura creada y habitación actualizada exitosamente.',
-      data: { id_factura: idFactura }
+      data: { id_factura: idFactura, numero_factura: numeroFactura }
     });
 
   } catch (error) {

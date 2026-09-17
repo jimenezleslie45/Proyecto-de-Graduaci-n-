@@ -4,16 +4,16 @@ const logger = require('../middlewares/logger');
 
 // Demo data for rooms
 const DEMO_HABITACIONES = [
-  { id: 1, numero: '101', piso: 1, id_tipo_habitacion: 1, id_estado: 1, descripcion: 'Habitación individual con vista a la ciudad', tiene_balcon: 0, tiene_vista: 1 },
-  { id: 2, numero: '102', piso: 1, id_tipo_habitacion: 2, id_estado: 2, descripcion: 'Habitación doble', tiene_balcon: 0, tiene_vista: 0 },
-  { id: 3, numero: '103', piso: 1, id_tipo_habitacion: 3, id_estado: 1, descripcion: 'Habitación twin', tiene_balcon: 1, tiene_vista: 1 },
-  { id: 4, numero: '201', piso: 2, id_tipo_habitacion: 4, id_estado: 3, descripcion: 'Suite junior', tiene_balcon: 1, tiene_vista: 1 },
-  { id: 5, numero: '202', piso: 2, id_tipo_habitacion: 2, id_estado: 1, descripcion: 'Habitación doble estándar', tiene_balcon: 0, tiene_vista: 0 },
-  { id: 6, numero: '203', piso: 2, id_tipo_habitacion: 1, id_estado: 4, descripcion: 'Habitación individual en mantenimiento', tiene_balcon: 0, tiene_vista: 0 },
-  { id: 7, numero: '301', piso: 3, id_tipo_habitacion: 5, id_estado: 1, descripcion: 'Suite presidencial', tiene_balcon: 1, tiene_vista: 1 },
-  { id: 8, numero: '302', piso: 3, id_tipo_habitacion: 6, id_estado: 2, descripcion: 'Habitación familiar', tiene_balcon: 1, tiene_vista: 1 },
-  { id: 9, numero: '303', piso: 3, id_tipo_habitacion: 3, id_estado: 1, descripcion: 'Habitación twin', tiene_balcon: 0, tiene_vista: 0 },
-  { id: 10, numero: '304', piso: 3, id_tipo_habitacion: 4, id_estado: 1, descripcion: 'Suite estándar', tiene_balcon: 1, tiene_vista: 1 }
+  { id: 1, numero: '101', piso: 1, id_tipo_habitacion: 1, id_estado: 1, descripcion: 'Habitación individual con vista a la ciudad', tiene_balcon: 0, tiene_vista: 1, activo: 1 },
+  { id: 2, numero: '102', piso: 1, id_tipo_habitacion: 2, id_estado: 2, descripcion: 'Habitación doble', tiene_balcon: 0, tiene_vista: 0, activo: 1 },
+  { id: 3, numero: '103', piso: 1, id_tipo_habitacion: 3, id_estado: 1, descripcion: 'Habitación twin', tiene_balcon: 1, tiene_vista: 1, activo: 1 },
+  { id: 4, numero: '201', piso: 2, id_tipo_habitacion: 4, id_estado: 3, descripcion: 'Suite junior', tiene_balcon: 1, tiene_vista: 1, activo: 1 },
+  { id: 5, numero: '202', piso: 2, id_tipo_habitacion: 2, id_estado: 1, descripcion: 'Habitación doble estándar', tiene_balcon: 0, tiene_vista: 0, activo: 1 },
+  { id: 6, numero: '203', piso: 2, id_tipo_habitacion: 1, id_estado: 4, descripcion: 'Habitación individual en mantenimiento', tiene_balcon: 0, tiene_vista: 0, activo: 1 },
+  { id: 7, numero: '301', piso: 3, id_tipo_habitacion: 5, id_estado: 1, descripcion: 'Suite presidencial', tiene_balcon: 1, tiene_vista: 1, activo: 1 },
+  { id: 8, numero: '302', piso: 3, id_tipo_habitacion: 6, id_estado: 2, descripcion: 'Habitación familiar', tiene_balcon: 1, tiene_vista: 1, activo: 1 },
+  { id: 9, numero: '303', piso: 3, id_tipo_habitacion: 3, id_estado: 1, descripcion: 'Habitación twin', tiene_balcon: 0, tiene_vista: 0, activo: 1 },
+  { id: 10, numero: '304', piso: 3, id_tipo_habitacion: 4, id_estado: 1, descripcion: 'Suite estándar', tiene_balcon: 1, tiene_vista: 1, activo: 1 }
 ];
 
 const DEMO_TIPOS = [
@@ -34,6 +34,21 @@ const DEMO_ESTADOS = [
   { id: 6, nombre: 'INSPECCION', descripcion: 'Habitación en proceso de inspección', color: '#64748b' }
 ];
 
+const getActualColumns = async (tableName) => {
+  try {
+    const result = await db.query(`
+      SELECT COLUMN_NAME
+      FROM INFORMATION_SCHEMA.COLUMNS
+      WHERE TABLE_NAME = @tableName
+      ORDER BY ORDINAL_POSITION
+    `, { tableName });
+    return (result || []).map((row) => String(row.COLUMN_NAME || row.column_name || '').toLowerCase());
+  } catch (error) {
+    logger.warn(`No se pudieron leer columnas de ${tableName}: ${error.message}`);
+    return [];
+  }
+};
+
 /**
  * Get all rooms
  */
@@ -42,25 +57,47 @@ const getAll = async (req, res) => {
     const isDemoMode = !db.isConnected();
     
     if (isDemoMode) {
-      const habitaciones = DEMO_HABITACIONES.map(h => ({
-        ...h,
-        tipo_habitacion: DEMO_TIPOS.find(t => t.id === h.id_tipo_habitacion),
-        estado: DEMO_ESTADOS.find(e => e.id === h.id_estado)
-      }));
+      const habitaciones = DEMO_HABITACIONES
+        .filter(h => h.activo !== 0)
+        .map(h => ({
+          ...h,
+          tipo_habitacion: DEMO_TIPOS.find(t => t.id === h.id_tipo_habitacion),
+          estado: DEMO_ESTADOS.find(e => e.id === h.id_estado)
+        }));
       return res.json({ success: true, data: habitaciones });
     }
 
-    const query = `
-      -- FIX: Consulta adaptada a la base de datos SIGOH
-      SELECT h.id_habitacion as id, h.numero, h.piso,
-             th.id_tipo as tipo_id, th.nombre as tipo_nombre, th.capacidad, th.tarifa_base as precio_base,
-             eh.id_estado as estado_id, eh.nombre as estado_nombre, eh.codigo_color as color, eh.descripcion as estado_descripcion
-      FROM habitacion h
-      LEFT JOIN tipo_habitacion th ON h.id_tipo = th.id_tipo
-      LEFT JOIN estado_habitacion eh ON h.id_estado_actual = eh.id_estado
-      ORDER BY h.piso, h.numero
-    `;
-    const rawResult = await db.query(query);
+    let rawResult;
+    try {
+      const query = `
+        -- FIX: Consulta adaptada a la base de datos SIGOH
+        SELECT h.id_habitacion as id, h.numero, h.piso,
+               th.id_tipo as tipo_id, th.nombre as tipo_nombre, th.capacidad, th.tarifa_base as precio_base,
+               eh.id_estado as estado_id, eh.nombre as estado_nombre, eh.codigo_color as color, eh.descripcion as estado_descripcion
+        FROM habitacion h
+        LEFT JOIN tipo_habitacion th ON h.id_tipo = th.id_tipo
+        LEFT JOIN estado_habitacion eh ON h.id_estado_actual = eh.id_estado
+        WHERE ISNULL(h.activo, 1) = 1
+        ORDER BY h.piso, h.numero
+      `;
+      rawResult = await db.query(query);
+    } catch (queryErr) {
+      if (queryErr.message && queryErr.message.includes('activo')) {
+        const fallbackQuery = `
+          SELECT h.id_habitacion as id, h.numero, h.piso,
+                 th.id_tipo as tipo_id, th.nombre as tipo_nombre, th.capacidad, th.tarifa_base as precio_base,
+                 eh.id_estado as estado_id, eh.nombre as estado_nombre, eh.codigo_color as color, eh.descripcion as estado_descripcion
+          FROM habitacion h
+          LEFT JOIN tipo_habitacion th ON h.id_tipo = th.id_tipo
+          LEFT JOIN estado_habitacion eh ON h.id_estado_actual = eh.id_estado
+          ORDER BY h.piso, h.numero
+        `;
+        rawResult = await db.query(fallbackQuery);
+      } else {
+        throw queryErr;
+      }
+    }
+
     // FIX: Normalizar la respuesta de la BD para que coincida con la estructura del modo Demo
     const data = rawResult.map(h => ({
       id: h.id, numero: h.numero, piso: h.piso, descripcion: h.tipo_nombre, tiene_balcon: 0, tiene_vista: 0,
@@ -104,7 +141,7 @@ const getAvailableRooms = async (req, res) => {
     
     if (isDemoMode) {
       const disponibles = DEMO_HABITACIONES
-        .filter(h => h.id_estado === 1) // 1 = Disponible
+        .filter(h => h.id_estado === 1 && h.activo !== 0) // 1 = Disponible y activa
         .map(h => ({
           id: h.id,
           numero: h.numero,
@@ -120,25 +157,44 @@ const getAvailableRooms = async (req, res) => {
       return res.json({ success: true, data: disponibles });
     }
 
-    const query = `
-      -- FIX: Consulta adaptada a la base de datos SIGOH
-      SELECT h.id_habitacion as id, h.numero, h.piso,
-             th.id_tipo as tipo_id, th.nombre as tipo_nombre, th.capacidad, th.tarifa_base as precio_base,
-             eh.id_estado as estado_id, eh.nombre as estado_nombre, eh.codigo_color as color, eh.descripcion as estado_descripcion
-      FROM habitacion h
-      LEFT JOIN tipo_habitacion th ON h.id_tipo = th.id_tipo
-      LEFT JOIN estado_habitacion eh ON h.id_estado_actual = eh.id_estado
-      WHERE eh.permite_checkin = 1
-      ORDER BY h.piso, h.numero
-    `;
-    const rawResult = await db.query(query);
+    let rawResult;
+    try {
+      const query = `
+        -- FIX: Consulta adaptada a la base de datos SIGOH
+        SELECT h.id_habitacion as id, h.numero, h.piso,
+               th.id_tipo as tipo_id, th.nombre as tipo_nombre, th.capacidad, th.tarifa_base as precio_base,
+               eh.id_estado as estado_id, eh.nombre as estado_nombre, eh.codigo_color as color, eh.descripcion as estado_descripcion
+        FROM habitacion h
+        LEFT JOIN tipo_habitacion th ON h.id_tipo = th.id_tipo
+        LEFT JOIN estado_habitacion eh ON h.id_estado_actual = eh.id_estado
+        WHERE eh.permite_checkin = 1 AND ISNULL(h.activo, 1) = 1
+        ORDER BY h.piso, h.numero
+      `;
+      rawResult = await db.query(query);
+    } catch (queryErr) {
+      if (queryErr.message && queryErr.message.includes('activo')) {
+        const fallbackQuery = `
+          SELECT h.id_habitacion as id, h.numero, h.piso,
+                 th.id_tipo as tipo_id, th.nombre as tipo_nombre, th.capacidad, th.tarifa_base as precio_base,
+                 eh.id_estado as estado_id, eh.nombre as estado_nombre, eh.codigo_color as color, eh.descripcion as estado_descripcion
+          FROM habitacion h
+          LEFT JOIN tipo_habitacion th ON h.id_tipo = th.id_tipo
+          LEFT JOIN estado_habitacion eh ON h.id_estado_actual = eh.id_estado
+          WHERE eh.permite_checkin = 1
+          ORDER BY h.piso, h.numero
+        `;
+        rawResult = await db.query(fallbackQuery);
+      } else {
+        throw queryErr;
+      }
+    }
+
     // FIX: Normalizar la respuesta de la BD para que coincida con la estructura del modo Demo
     const data = rawResult.map(h => ({
       id: h.id, numero: h.numero, piso: h.piso, descripcion: h.tipo_nombre, tiene_balcon: 0, tiene_vista: 0,
       tipo_habitacion: { id: h.tipo_id, nombre: h.tipo_nombre, descripcion: h.tipo_nombre, capacidad: h.capacidad, precio_base: h.precio_base },
       estado: { id: h.estado_id, nombre: h.estado_nombre, descripcion: h.estado_descripcion, color: h.color }
     }));
-
 
     res.json({ success: true, data });
   } catch (error) {
@@ -392,27 +448,65 @@ const update = async (req, res) => {
 };
 
 /**
- * Delete room
+ * Delete room (Soft delete)
  */
 const remove = async (req, res) => {
   try {
     const { id } = req.params;
+    const roomId = parseInt(id);
+
+    if (!id || isNaN(roomId)) {
+      return res.status(400).json({ success: false, message: 'ID de habitación no válido' });
+    }
+
     const isDemoMode = !db.isConnected();
     
     if (isDemoMode) {
-      const index = DEMO_HABITACIONES.findIndex(h => h.id === parseInt(id));
-      if (index === -1) {
-        return res.status(404).json({ success: false, message: 'Habitación no encontrada' });
+      const habitacion = DEMO_HABITACIONES.find(h => h.id === roomId);
+      if (!habitacion || habitacion.activo === 0) {
+        return res.status(404).json({ success: false, message: 'Habitación no encontrada o ya desactivada' });
       }
-      DEMO_HABITACIONES.splice(index, 1);
-      return res.json({ success: true, message: 'Habitación eliminada exitosamente' });
+      habitacion.activo = 0;
+      return res.json({ success: true, message: 'Habitación desactivada exitosamente' });
     }
 
-    await db.query('DELETE FROM habitacion WHERE id_habitacion = @id', { id });
-    res.json({ success: true, message: 'Habitación eliminada exitosamente' });
+    const habitacionCols = await getActualColumns('habitacion');
+    const idCol = habitacionCols.includes('id_habitacion') ? 'id_habitacion' : 'id';
+
+    // Si la columna activo aún no existe en SQL Server, crearla
+    if (habitacionCols.length > 0 && !habitacionCols.includes('activo')) {
+      logger.info('Columna activo no detectada en habitacion. Creándola en la base de datos...');
+      try {
+        await db.query(`ALTER TABLE habitacion ADD activo BIT DEFAULT 1;`);
+        await db.query(`UPDATE habitacion SET activo = 1 WHERE activo IS NULL;`);
+      } catch (alterErr) {
+        logger.warn('Aviso al agregar columna activo:', alterErr.message);
+      }
+    }
+
+    // Verificar si la habitación existe en la base de datos
+    const checkRoom = await db.query(
+      `SELECT ${idCol} FROM habitacion WHERE ${idCol} = @id`,
+      { id: roomId }
+    );
+
+    if (!checkRoom || checkRoom.length === 0) {
+      return res.status(404).json({ success: false, message: 'Habitación no encontrada' });
+    }
+
+    // Desactivar habitación (Soft Delete)
+    await db.query(
+      `UPDATE habitacion SET activo = 0 WHERE ${idCol} = @id`,
+      { id: roomId }
+    );
+
+    return res.json({ success: true, message: 'Habitación desactivada exitosamente' });
   } catch (error) {
-    logger.error('Error deleting room:', error);
-    res.status(500).json({ success: false, message: 'Error al eliminar habitación' });
+    logger.error('Error al desactivar habitación:', error);
+    return res.status(500).json({ 
+      success: false, 
+      message: `No se pudo desactivar la habitación: ${error.message || 'Error del servidor'}` 
+    });
   }
 };
 

@@ -180,14 +180,21 @@ const getAll = async (req, res) => {
       params.fecha_hasta = fecha_hasta;
     }
 
+    const personaCols = await getActualColumns('persona');
+    const docField = personaCols.includes('documento') ? 'p.documento' : (personaCols.includes('numero_documento') ? 'p.numero_documento' : "''");
+    const hasTelCol = personaCols.includes('telefono');
     const whereSql = whereClauses.length ? `WHERE ${whereClauses.join(' AND ')}` : '';
 
     const query = `
-      SELECT r.*, h.numero as numero_habitacion, p.nombres, p.apellidos, p.numero_documento, p.telefono, p.email
+      SELECT r.*, h.numero as numero_habitacion, p.nombres, p.apellidos, 
+             ${docField} as numero_documento, 
+             ${hasTelCol ? 'p.telefono' : 'COALESCE(pt.telefono, \'\')'} as telefono, 
+             p.email
       FROM dbo.reserva r
       INNER JOIN dbo.habitacion h ON h.id_habitacion = r.id_habitacion
       INNER JOIN dbo.huesped hu ON hu.id_huesped = r.id_huesped
       INNER JOIN dbo.persona p ON p.id_persona = hu.id_persona
+      ${!hasTelCol ? 'LEFT JOIN dbo.persona_telefono pt ON p.id_persona = pt.id_persona AND pt.principal = 1' : ''}
       ${whereSql}
       ORDER BY r.${reservaMeta.fecha_entrada} ASC
     `;

@@ -269,17 +269,33 @@ const getAvailableRooms = async (req, res) => {
       return res.json({ success: true, data: disponibles });
     }
 
-    const query = `
-      -- FIX: Consulta adaptada a la base de datos SIGOH
-      SELECT h.id_habitacion as id, h.numero, h.piso, th.nombre as tipo, th.tarifa_base as precio
-      FROM habitacion h
-      INNER JOIN tipo_habitacion th ON h.id_tipo = th.id_tipo
-      INNER JOIN estado_habitacion eh ON h.id_estado_actual = eh.id_estado
-      WHERE eh.permite_checkin = 1
-      ORDER BY h.piso, h.numero
-    `;
-    
-    const result = await db.query(query);
+    let result;
+    try {
+      const query = `
+        -- FIX: Consulta adaptada a la base de datos SIGOH
+        SELECT h.id_habitacion as id, h.numero, h.piso, th.nombre as tipo, th.tarifa_base as precio
+        FROM habitacion h
+        INNER JOIN tipo_habitacion th ON h.id_tipo = th.id_tipo
+        INNER JOIN estado_habitacion eh ON h.id_estado_actual = eh.id_estado
+        WHERE eh.permite_checkin = 1 AND ISNULL(h.activo, 1) = 1
+        ORDER BY h.piso, h.numero
+      `;
+      result = await db.query(query);
+    } catch (queryErr) {
+      if (queryErr.message && queryErr.message.includes('activo')) {
+        const fallbackQuery = `
+          SELECT h.id_habitacion as id, h.numero, h.piso, th.nombre as tipo, th.tarifa_base as precio
+          FROM habitacion h
+          INNER JOIN tipo_habitacion th ON h.id_tipo = th.id_tipo
+          INNER JOIN estado_habitacion eh ON h.id_estado_actual = eh.id_estado
+          WHERE eh.permite_checkin = 1
+          ORDER BY h.piso, h.numero
+        `;
+        result = await db.query(fallbackQuery);
+      } else {
+        throw queryErr;
+      }
+    }
     res.json({ success: true, data: result });
   } catch (error) {
     logger.error('Error getting available rooms:', error);

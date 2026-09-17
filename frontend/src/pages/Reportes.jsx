@@ -17,7 +17,8 @@ import {
   Save,
   FileBarChart,
   Timer,
-  Zap
+  Zap,
+  Receipt
 } from 'lucide-react'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -40,6 +41,8 @@ const Reportes = () => {
   const [fechaInicio, setFechaInicio] = useState('')
   const [fechaFin, setFechaFin] = useState('')
   const [lastUpdate, setLastUpdate] = useState(null)
+  const [historialFacturas, setHistorialFacturas] = useState([])
+  const [loadingFacturas, setLoadingFacturas] = useState(false)
 
   // Configuración de reportes programados
   const [config, setConfig] = useState({
@@ -77,6 +80,40 @@ const Reportes = () => {
     }, 300000) // 5 minutos
     return () => clearInterval(interval)
   }, [fetchKpis])
+
+  const fetchFacturas = useCallback(async () => {
+    setLoadingFacturas(true)
+    try {
+      const response = await api.get('/facturas')
+      setHistorialFacturas(response.data.data || response.data || [])
+    } catch (error) {
+      console.error('Error al cargar facturas:', error)
+      setHistorialFacturas([])
+    } finally {
+      setLoadingFacturas(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchFacturas()
+  }, [fetchFacturas])
+
+  const descargarPDF = async (idFactura) => {
+    try {
+      const response = await api.get(`/facturas/${idFactura}/descargar`, { responseType: 'blob' })
+      const url = window.URL.createObjectURL(new Blob([response.data]))
+      const link = document.createElement('a')
+      link.href = url
+      link.setAttribute('download', `factura-${idFactura}.pdf`)
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+      toast.success(`Descargando factura #${idFactura}`)
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Error al descargar PDF')
+    }
+  }
 
   const exportarReporte = async (formato) => {
     try {
@@ -502,6 +539,81 @@ const Reportes = () => {
                     </tbody>
                   </table>
                 </div>
+              </div>
+            </div>
+          </section>
+
+          {/* SECCIÓN 4: HISTORIAL DE FACTURAS */}
+          <section>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-lg font-semibold text-slate-900">Historial de Facturas emitidas</h2>
+              <button
+                onClick={fetchFacturas}
+                className="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-primary-600 transition"
+              >
+                <RefreshCw className="h-3 w-3" /> Actualizar
+              </button>
+            </div>
+            <div className="card overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200 text-sm">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Factura N°</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Cliente</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Habitación</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Fecha</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Total</th>
+                      <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-100">
+                    {loadingFacturas ? (
+                      <tr>
+                        <td colSpan={6} className="px-4 py-8 text-center text-gray-400">
+                          <div className="inline-flex items-center gap-2">
+                            <div className="w-4 h-4 border-2 border-primary-400 border-t-transparent rounded-full animate-spin" />
+                            Cargando facturas...
+                          </div>
+                        </td>
+                      </tr>
+                    ) : historialFacturas.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="px-4 py-10 text-center">
+                          <Receipt className="h-8 w-8 mx-auto mb-2 text-gray-300" />
+                          <p className="text-sm text-gray-500">No hay facturas emitidas aún.</p>
+                        </td>
+                      </tr>
+                    ) : (
+                      historialFacturas.map((factura) => (
+                        <tr key={factura.id_factura || factura.id} className="hover:bg-gray-50 transition-colors">
+                          <td className="px-4 py-3 font-semibold text-primary-700">
+                            {factura.numero_factura || `FAC-${String(factura.id_factura || factura.id).padStart(4, '0')}`}
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="font-medium text-gray-800">{factura.nombre_cliente || factura.cliente || 'Cliente'}</div>
+                            <div className="text-xs text-gray-400">{factura.documento_cliente || '-'}</div>
+                          </td>
+                          <td className="px-4 py-3 text-gray-600">{factura.numero_habitacion || factura.habitacion || '-'}</td>
+                          <td className="px-4 py-3 text-gray-600">
+                            {factura.fecha_emision ? new Date(factura.fecha_emision).toLocaleDateString() : '-'}
+                          </td>
+                          <td className="px-4 py-3 font-semibold text-gray-800">Q{Number(factura.total || 0).toFixed(2)}</td>
+                          <td className="px-4 py-3 text-right">
+                            <button
+                              type="button"
+                              onClick={() => descargarPDF(factura.id_factura || factura.id)}
+                              className="inline-flex items-center gap-1 rounded-lg bg-gray-100 hover:bg-primary-100 hover:text-primary-700 px-3 py-1.5 text-xs font-medium transition-colors"
+                            >
+                              <Download className="h-3.5 w-3.5" />
+                              PDF
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
               </div>
             </div>
           </section>

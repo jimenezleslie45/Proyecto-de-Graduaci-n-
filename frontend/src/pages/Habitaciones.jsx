@@ -83,7 +83,7 @@ const Habitaciones = () => {
       toast.success('Habitación eliminada')
       fetchData()
     } catch (error) {
-      toast.error('Error al eliminar')
+      toast.error(error.response?.data?.message || 'Error al eliminar')
     }
   }
 

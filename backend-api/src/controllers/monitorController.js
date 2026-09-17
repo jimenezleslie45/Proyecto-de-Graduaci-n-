@@ -70,7 +70,7 @@ const getRoomStatuses = async (req, res) => {
       LEFT JOIN estadia e ON h.id_habitacion = e.id_habitacion AND e.estado = 'ACTIVA'
       LEFT JOIN huesped hu ON e.id_huesped = hu.id_huesped
       LEFT JOIN persona p ON hu.id_persona = p.id_persona
-      WHERE ${whereCondition}
+      WHERE ${whereCondition} AND ISNULL(h.activo, 1) = 1
       ORDER BY h.piso, h.numero
     `, params);
 
@@ -129,7 +129,9 @@ const getStatusSummary = async (req, res) => {
     const summary = await db.query(`
       SELECT eh.nombre as estado, eh.codigo_color as color, COUNT(h.id_habitacion) as cantidad
       FROM habitacion h
-      GROUP BY eh.nombre, eh.color
+      INNER JOIN estado_habitacion eh ON h.id_estado_actual = eh.id_estado
+      WHERE ISNULL(h.activo, 1) = 1
+      GROUP BY eh.nombre, eh.codigo_color
       ORDER BY eh.nombre
     `);
 
@@ -193,7 +195,8 @@ const getDashboard = async (req, res) => {
       SELECT eh.nombre as estado, eh.codigo_color as color, COUNT(h.id_habitacion) as cantidad
       FROM dbo.habitacion h
       INNER JOIN estado_habitacion eh ON h.id_estado_actual = eh.id_estado
-      GROUP BY eh.nombre, eh.color
+      WHERE ISNULL(h.activo, 1) = 1
+      GROUP BY eh.nombre, eh.codigo_color
     `);
 
     // Get today's stats
@@ -218,7 +221,7 @@ const getDashboard = async (req, res) => {
 
     // Calculate occupancy rate
     const totalRooms = await db.query(`
-      SELECT COUNT(*) as total FROM habitacion
+      SELECT COUNT(*) as total FROM habitacion WHERE ISNULL(activo, 1) = 1
     `);
 
     const ocuppedRooms = roomSummary.find(r => r.estado === 'OCUPADA')?.cantidad || 0;
