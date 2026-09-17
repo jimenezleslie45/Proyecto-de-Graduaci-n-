@@ -34,7 +34,10 @@ const getActualColumns = async (tableName) => {
 const createEstadiaRecord = async ({
   id_habitacion,
   id_huesped,
+  fecha_checkin,
+  hora_checkin,
   fecha_checkout_prevista,
+  hora_checkout_prevista,
   numero_adultos,
   numero_ninos,
   precio_noche,
@@ -47,10 +50,29 @@ const createEstadiaRecord = async ({
 }) => {
   const columns = await getActualColumns('estadia');
 
+  let checkinDateTime = new Date();
+  if (fecha_checkin) {
+    if (hora_checkin && typeof fecha_checkin === 'string' && !fecha_checkin.includes('T')) {
+      checkinDateTime = new Date(`${fecha_checkin}T${hora_checkin}`);
+    } else {
+      checkinDateTime = new Date(fecha_checkin);
+    }
+  }
+
+  let checkoutDateTime = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  if (fecha_checkout_prevista) {
+    if (hora_checkout_prevista && typeof fecha_checkout_prevista === 'string' && !fecha_checkout_prevista.includes('T')) {
+      checkoutDateTime = new Date(`${fecha_checkout_prevista}T${hora_checkout_prevista}`);
+    } else {
+      checkoutDateTime = new Date(fecha_checkout_prevista);
+    }
+  }
+
   const payload = {
     id_habitacion: Number(id_habitacion),
     id_huesped: Number(id_huesped),
-    fecha_checkout_prevista: fecha_checkout_prevista ? new Date(fecha_checkout_prevista) : new Date(),
+    fecha_checkin: checkinDateTime,
+    fecha_checkout_prevista: checkoutDateTime,
     cantidad_personas: Number(numero_adultos || 1) + Number(numero_ninos || 0),
     total_cargo: Number(precio_noche || 0),
     metodo_pago: metodo_pago || null,
@@ -90,13 +112,13 @@ const createEstadiaRecord = async ({
   if (checkInColumn) {
     insertColumns.push(checkInColumn);
     insertValues.push('@check_in');
-    params.check_in = new Date();
+    params.check_in = checkinDateTime;
   }
   const checkOutColumn = columns.includes('check_out') ? 'check_out' : (columns.includes('fecha_checkout_prevista') ? 'fecha_checkout_prevista' : (columns.includes('fecha_checkout') ? 'fecha_checkout' : null));
   if (checkOutColumn) {
     insertColumns.push(checkOutColumn);
     insertValues.push('@fecha_checkout_prevista');
-    params.fecha_checkout_prevista = payload.fecha_checkout_prevista;
+    params.fecha_checkout_prevista = checkoutDateTime;
   }
   if (columns.includes('numero_adultos')) {
     insertColumns.push('numero_adultos');
@@ -172,38 +194,90 @@ const createEstadiaRecord = async ({
 /**
  * Get all active stays (check-in)
  */
-const getAll = async (req, res) => {
+const getActiveStays = async (req, res) => {
   try {
     const isDemoMode = !db.isConnected();
     
     if (isDemoMode) {
-      const estadias = demoEstadias.map(e => ({
-        ...e,
-        habitacion: { id: e.id_habitacion, numero: e.id_habitacion === 2 ? '102' : '302' },
-        huesped: DEMO_HUESPEDES.find(h => h.id === e.id_huesped)
-      }));
+      const estadias = demoEstadias.filter(e => e.estado === 'Activa' || e.estado === 'ACTIVA').map(e => {
+        const guest = DEMO_HUESPEDES.find(h => h.id === e.id_huesped) || {};
+        return {
+          id_estadia: e.id,
+          id: e.id,
+          id_habitacion: e.id_habitacion,
+          id_huesped: e.id_huesped,
+          check_in: e.fecha_checkin,
+          fecha_checkin: e.fecha_checkin,
+          check_out: e.fecha_checkout_prevista,
+          fecha_checkout_prevista: e.fecha_checkout_prevista,
+          precio_noche: e.precio_noche || 80,
+          total_cargo: e.total_cargo || (e.precio_noche ? e.precio_noche * 2 : 160),
+          metodo_pago: e.metodo_pago || 'Efectivo',
+          cantidad_personas: (e.numero_adultos || 1) + (e.numero_ninos || 0),
+          estado: 'ACTIVA',
+          numero_habitacion: e.id_habitacion === 2 ? '102' : '302',
+          piso: e.id_habitacion === 2 ? 1 : 3,
+          tipo_habitacion: e.id_habitacion === 2 ? 'Doble' : 'Familiar',
+          nombres: guest.nombres || 'Huésped',
+          apellidos: guest.apellidos || 'Demo',
+          nombre_completo: `${guest.nombres || 'Huésped'} ${guest.apellidos || 'Demo'}`.trim(),
+          documento: guest.numero_documento || '1234567',
+          numero_documento: guest.numero_documento || '1234567',
+          email: guest.email || '',
+          telefono: guest.telefono || '',
+          habitacion: { id: e.id_habitacion, numero: e.id_habitacion === 2 ? '102' : '302' },
+          huesped: guest
+        };
+      });
       return res.json({ success: true, data: estadias });
     }
 
     const query = `
-      -- FIX: Consulta adaptada a la base de datos SIGOH
-      SELECT e.*, h.numero as numero_habitacion, p.nombres, p.apellidos, p.documento as numero_documento, pt.telefono, p.email
+      SELECT 
+        e.id_estadia,
+        e.id_estadia as id,
+        e.id_habitacion,
+        e.id_huesped,
+        e.recepcionista_id,
+        e.check_in,
+        e.check_in as fecha_checkin,
+        e.check_out,
+        e.check_out as fecha_checkout_prevista,
+        e.total_cargo,
+        COALESCE(th.tarifa_base, e.total_cargo) as precio_noche,
+        e.metodo_pago,
+        e.cantidad_personas,
+        e.estado,
+        h.numero as numero_habitacion,
+        h.piso,
+        th.nombre as tipo_habitacion,
+        th.tarifa_base,
+        p.nombres,
+        p.apellidos,
+        CONCAT(p.nombres, ' ', p.apellidos) as nombre_completo,
+        p.documento,
+        p.documento as numero_documento,
+        p.email,
+        pt.telefono
       FROM estadia e
       INNER JOIN habitacion h ON e.id_habitacion = h.id_habitacion
+      LEFT JOIN tipo_habitacion th ON h.id_tipo = th.id_tipo
       INNER JOIN huesped hs ON e.id_huesped = hs.id_huesped
       INNER JOIN persona p ON hs.id_persona = p.id_persona
       LEFT JOIN persona_telefono pt ON p.id_persona = pt.id_persona AND pt.principal = 1
-      WHERE e.estado = 'ACTIVA' -- Se usa la columna correcta 'estado'
+      WHERE e.estado = 'ACTIVA'
       ORDER BY e.check_in DESC
     `;
     
     const result = await db.query(query);
     res.json({ success: true, data: result });
   } catch (error) {
-    logger.error('Error getting check-ins:', error);
-    res.status(500).json({ success: false, message: 'Error al obtener check-ins' });
+    logger.error('Error getting active stays:', error);
+    res.status(500).json({ success: false, message: 'Error al obtener estadías activas' });
   }
 };
+
+const getAll = getActiveStays;
 
 /**
  * Get check-in details by ID
@@ -311,7 +385,10 @@ const create = async (req, res) => {
     const {
       id_habitacion,
       id_huesped,
+      fecha_checkin,
+      hora_checkin,
       fecha_checkout_prevista,
+      hora_checkout_prevista,
       numero_adultos,
       numero_ninos,
       precio_noche,
@@ -322,6 +399,24 @@ const create = async (req, res) => {
     } = req.body;
     const recepcionista_id = req.user.id; // El ID del usuario logueado
     const isDemoMode = !db.isConnected();
+
+    let checkinDateTime = new Date();
+    if (fecha_checkin) {
+      if (hora_checkin && typeof fecha_checkin === 'string' && !fecha_checkin.includes('T')) {
+        checkinDateTime = new Date(`${fecha_checkin}T${hora_checkin}`);
+      } else {
+        checkinDateTime = new Date(fecha_checkin);
+      }
+    }
+
+    let checkoutDateTime = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    if (fecha_checkout_prevista) {
+      if (hora_checkout_prevista && typeof fecha_checkout_prevista === 'string' && !fecha_checkout_prevista.includes('T')) {
+        checkoutDateTime = new Date(`${fecha_checkout_prevista}T${hora_checkout_prevista}`);
+      } else {
+        checkoutDateTime = new Date(fecha_checkout_prevista);
+      }
+    }
     
     if (isDemoMode) {
       const newId = demoEstadias.length + 1;
@@ -331,8 +426,8 @@ const create = async (req, res) => {
         id_habitacion,
         id_huesped,
         numero_estadia: numeroEstadia,
-        fecha_checkin: new Date(),
-        fecha_checkout_prevista: new Date(fecha_checkout_prevista),
+        fecha_checkin: checkinDateTime,
+        fecha_checkout_prevista: checkoutDateTime,
         numero_adultos: numero_adultos || 1,
         numero_ninos: numero_ninos || 0,
         precio_noche: precio_noche || 50,
@@ -348,7 +443,10 @@ const create = async (req, res) => {
     const result = await createEstadiaRecord({
       id_habitacion,
       id_huesped,
+      fecha_checkin,
+      hora_checkin,
       fecha_checkout_prevista,
+      hora_checkout_prevista,
       numero_adultos,
       numero_ninos,
       precio_noche,
@@ -414,6 +512,7 @@ const searchGuest = async (req, res) => {
 
 module.exports = {
   getAll,
+  getActiveStays,
   getById,
   getAvailableRooms,
   create,

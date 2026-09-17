@@ -156,8 +156,20 @@ const checkinRules = {
       .isInt({ min: 1 })
       .withMessage('Huésped es requerido'),
     body('fecha_checkout_prevista')
-      .isISO8601()
+      .notEmpty()
       .withMessage('Fecha de checkout prevista es requerida'),
+    body('fecha_checkin')
+      .optional()
+      .notEmpty()
+      .withMessage('Fecha de check-in inválida'),
+    body('hora_checkin')
+      .optional()
+      .isString()
+      .trim(),
+    body('hora_checkout_prevista')
+      .optional()
+      .isString()
+      .trim(),
     body('numero_adultos')
       .optional()
       .isInt({ min: 1 })

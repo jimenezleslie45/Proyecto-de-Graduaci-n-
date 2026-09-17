@@ -14,6 +14,9 @@ router.post('/huesped', authenticate, canPerformOperations, huespedController.cr
 // GET /api/operaciones/checkin - Get all check-ins
 router.get('/checkin', authenticate, canPerformOperations, checkinController.getAll);
 
+// GET /api/operaciones/checkin/activos - Get active stays
+router.get('/checkin/activos', authenticate, canPerformOperations, checkinController.getActiveStays);
+
 // GET /api/operaciones/checkin/:id - Get check-in by ID
 router.get('/checkin/:id', authenticate, canPerformOperations, commonRules.id, validate, checkinController.getById);
 

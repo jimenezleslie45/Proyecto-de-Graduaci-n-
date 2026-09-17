@@ -23,11 +23,11 @@ const navigation = [
   // 1) Panel (Dashboard visual) - Admin, Recepcionista
   { name: 'Panel', href: '/panel', icon: LayoutDashboard, roles: ['recepcion', 'admin'] },
 
-  // 2) Registro de Check-in - Admin, Recepcionista
-  { name: 'Registro', href: '/registro', icon: LogIn, roles: ['recepcion', 'admin'] },
-
-  // 3) Reservas - Admin, Recepcionista
+  // 2) Reservas - Admin, Recepcionista
   { name: 'Reservas', href: '/reservas', icon: CalendarRange, roles: ['recepcion', 'admin'] },
+
+  // 3) Registro de Check-in - Admin, Recepcionista
+  { name: 'Registro', href: '/registro', icon: LogIn, roles: ['recepcion', 'admin'] },
 
   // 4) Registro de Check-out - Admin, Recepcionista
   { name: 'Salidas', href: '/salidas', icon: LogOut, roles: ['recepcion', 'admin'] },

@@ -34,8 +34,8 @@ const AppRoutes = () => {
           <Route index element={<Navigate to="/panel" />} />
           <Route path="panel" element={<Panel />} /> 
           <Route path="habitaciones" element={<Habitaciones />} />
-          <Route path="registro" element={<CheckIn />} />
           <Route path="reservas" element={<Reservas />} />
+          <Route path="registro" element={<CheckIn />} />
           <Route path="salidas" element={<CheckOut />} />
           <Route path="monitor" element={<Monitor />} />
           <Route path="limpieza" element={<GestionLimpieza />} />

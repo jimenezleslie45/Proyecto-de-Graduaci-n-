@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import api from '../services/api'
 import toast from 'react-hot-toast'
 import {
@@ -12,7 +12,14 @@ import {
   BellRing,
   Calculator,
   CheckCircle,
-  X
+  X,
+  User,
+  BedDouble,
+  Clock,
+  ArrowRight,
+  RefreshCw,
+  Phone,
+  FileText
 } from 'lucide-react'
 
 const METODOS_PAGO = ['Efectivo', 'Tarjeta', 'Transferencia']
@@ -23,18 +30,16 @@ const CheckOut = () => {
   const [loading, setLoading] = useState(true)
   const [selectedEstadia, setSelectedEstadia] = useState(null)
   const [searchTerm, setSearchTerm] = useState('')
-  const [showDropdown, setShowDropdown] = useState(false)
   const [procesando, setProcesando] = useState(false)
   const [extending, setExtending] = useState(false)
   const [showExtender, setShowExtender] = useState(false)
   const [nuevaFechaSalida, setNuevaFechaSalida] = useState('')
   const [successModal, setSuccessModal] = useState({ visible: false, numero_factura: '', id_factura: null })
-  const searchRef = useRef(null)
 
   const [formData, setFormData] = useState({
     fecha_salida: '',
     hora_salida: '',
-    metodo_pago: '',
+    metodo_pago: 'Efectivo',
     referencia: '',
     genera_factura: true,
     observaciones: ''
@@ -44,10 +49,18 @@ const CheckOut = () => {
 
   const fetchEstadasActivas = useCallback(async () => {
     try {
-      const response = await api.get('/operaciones/checkin')
-      setEstadasActivas(response.data.data || response.data || [])
+      setLoading(true)
+      let response
+      try {
+        response = await api.get('/operaciones/checkin/activos')
+      } catch {
+        response = await api.get('/operaciones/checkin')
+      }
+      const data = response.data?.data || response.data || []
+      setEstadasActivas(Array.isArray(data) ? data : [])
     } catch (error) {
       console.error('Error al cargar estadías activas:', error)
+      toast.error('Error al cargar las estadías activas')
       setEstadasActivas([])
     } finally {
       setLoading(false)
@@ -58,48 +71,73 @@ const CheckOut = () => {
     fetchEstadasActivas()
   }, [fetchEstadasActivas])
 
-  // Cerrar dropdown al hacer clic fuera del buscador
-  useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (searchRef.current && !searchRef.current.contains(e.target)) {
-        setShowDropdown(false)
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [])
+  // Cálculo de días hospedado desde el check-in hasta el momento actual
+  const calcularDiasHospedado = (fechaCheckin) => {
+    if (!fechaCheckin) return '-'
+    const checkin = new Date(fechaCheckin)
+    if (isNaN(checkin.getTime())) return '-'
+    const ahora = new Date()
+    const dCheckin = new Date(checkin.getFullYear(), checkin.getMonth(), checkin.getDate())
+    const dAhora = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate())
+    const diffMs = dAhora.getTime() - dCheckin.getTime()
+    const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24))
+    if (diffDays <= 0) return 'Hoy (1er día)'
+    if (diffDays === 1) return '1 día'
+    return `${diffDays} días`
+  }
 
+  const formatFechaHora = (fecha) => {
+    if (!fecha) return '-'
+    const d = new Date(fecha)
+    if (isNaN(d.getTime())) return '-'
+    return d.toLocaleDateString('es-ES', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    })
+  }
+
+  const formatFechaCorta = (fecha) => {
+    if (!fecha) return '-'
+    const d = new Date(fecha)
+    if (isNaN(d.getTime())) return '-'
+    return d.toLocaleDateString('es-ES', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
+    })
+  }
+
+  // Filtrado en tiempo real sin requerir botón 'Buscar'
   const filteredEstadias = useMemo(() => {
     const term = searchTerm.trim().toLowerCase()
     if (!term) return estadasActivas
 
     return estadasActivas.filter((e) => {
-      const habitacion = String(e.numero_habitacion || '').toLowerCase()
+      const habitacion = String(e.numero_habitacion || e.habitacion?.numero || '').toLowerCase()
       const nombre = `${e.nombres || ''} ${e.apellidos || ''}`.toLowerCase()
-      const documento = String(e.numero_documento || '').toLowerCase()
-      const numeroEstadia = String(e.numero_estadia || e.id || '').toLowerCase()
+      const documento = String(e.numero_documento || e.documento || '').toLowerCase()
+      const numeroEstadia = String(e.numero_estadia || e.id_estadia || e.id || '').toLowerCase()
       return habitacion.includes(term) || nombre.includes(term) || documento.includes(term) || numeroEstadia.includes(term)
     })
   }, [estadasActivas, searchTerm])
 
-  const handleSearchChange = (e) => {
-    setSearchTerm(e.target.value)
-    setShowDropdown(true)
-    if (!e.target.value.trim()) {
-      setSelectedEstadia(null)
-      setShowDropdown(false)
-    }
-  }
-
   const selectEstadia = (estadia) => {
     setSelectedEstadia(estadia)
-    setSearchTerm(`${estadia.nombres || ''} ${estadia.apellidos || ''} — Hab. ${estadia.numero_habitacion || ''}`.trim())
-    setShowDropdown(false)
+    setShowExtender(false)
+    setNuevaFechaSalida('')
     setCargos([])
+
+    const ahora = new Date()
+    const fechaSalidaDefecto = ahora.toISOString().split('T')[0]
+    const horaSalidaDefecto = ahora.toTimeString().slice(0, 5)
+
     setFormData({
-      fecha_salida: '',
-      hora_salida: '',
-      metodo_pago: '',
+      fecha_salida: fechaSalidaDefecto,
+      hora_salida: horaSalidaDefecto,
+      metodo_pago: estadia.metodo_pago || 'Efectivo',
       referencia: '',
       genera_factura: true,
       observaciones: ''
@@ -107,7 +145,7 @@ const CheckOut = () => {
   }
 
   const agregarCargo = (tipo) => {
-    setCargos((prev) => [...prev, { id: Date.now(), tipo, descripcion: '', cantidad: '', precio: '' }])
+    setCargos((prev) => [...prev, { id: Date.now(), tipo, descripcion: '', cantidad: 1, precio: '' }])
   }
 
   const actualizarCargo = (id, campo, valor) => {
@@ -119,20 +157,23 @@ const CheckOut = () => {
   }
 
   const calcularNoches = () => {
-    if (!selectedEstadia?.fecha_checkin) return 1
-    const checkin = new Date(selectedEstadia.fecha_checkin)
+    const checkinRaw = selectedEstadia?.fecha_checkin || selectedEstadia?.check_in
+    if (!checkinRaw) return 1
+    const checkin = new Date(checkinRaw)
+    const checkoutPrevistoRaw = selectedEstadia?.fecha_checkout_prevista || selectedEstadia?.check_out || checkinRaw
     const checkout = formData.fecha_salida
       ? new Date(`${formData.fecha_salida}T${formData.hora_salida || '12:00'}`)
-      : new Date(selectedEstadia.fecha_checkout_prevista || selectedEstadia.fecha_checkin)
+      : new Date(checkoutPrevistoRaw)
     const diff = Math.round((checkout.getTime() - checkin.getTime()) / 86400000)
     return Math.max(1, diff)
   }
 
-  const getPrecioNoche = () => selectedEstadia?.precio_noche ?? selectedEstadia?.precio ?? 0
+  const getPrecioNoche = () =>
+    selectedEstadia?.precio_noche ?? selectedEstadia?.tarifa_base ?? selectedEstadia?.precio ?? 0
 
   const calcularSubtotalAlojamiento = () => {
     if (!selectedEstadia) return 0
-    return calcularNoches() * getPrecioNoche()
+    return calcularNoches() * Number(getPrecioNoche() || 0)
   }
 
   const calcularSubtotalCargos = () =>
@@ -215,7 +256,7 @@ const CheckOut = () => {
 
       await api.put(`/operaciones/checkout/${idEstadia}`, checkoutPayload)
 
-      // 2. Generar factura si aplica — el backend genera y devuelve el número correlativo
+      // 2. Generar factura si aplica
       let numeroFacturaGenerada = null
       let idFacturaGenerada = null
 
@@ -223,7 +264,7 @@ const CheckOut = () => {
         const facturaPayload = {
           id_habitacion: selectedEstadia.id_habitacion,
           nombre_cliente: `${selectedEstadia.nombres || ''} ${selectedEstadia.apellidos || ''}`.trim(),
-          documento_cliente: selectedEstadia.numero_documento,
+          documento_cliente: selectedEstadia.numero_documento || selectedEstadia.documento,
           email_cliente: selectedEstadia.email || selectedEstadia.correo || '',
           subtotal: Number(subtotal.toFixed(2)),
           impuesto: Number(impuesto.toFixed(2)),
@@ -247,7 +288,7 @@ const CheckOut = () => {
         numeroFacturaGenerada = response.data?.data?.numero_factura || (idFacturaGenerada ? `FAC-${String(idFacturaGenerada).padStart(4, '0')}` : '')
       }
 
-      // 3. Limpiar formulario
+      // 3. Limpiar formulario y selección
       setSelectedEstadia(null)
       setCargos([])
       setSearchTerm('')
@@ -255,7 +296,7 @@ const CheckOut = () => {
       setFormData({
         fecha_salida: '',
         hora_salida: '',
-        metodo_pago: '',
+        metodo_pago: 'Efectivo',
         referencia: '',
         genera_factura: true,
         observaciones: ''
@@ -263,7 +304,7 @@ const CheckOut = () => {
 
       await fetchEstadasActivas()
 
-      // 4. Mostrar modal de éxito con el número de factura
+      // 4. Mostrar modal de éxito
       setSuccessModal({
         visible: true,
         numero_factura: numeroFacturaGenerada,
@@ -280,100 +321,258 @@ const CheckOut = () => {
     setSuccessModal({ visible: false, numero_factura: '', id_factura: null })
   }
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="w-8 h-8 border-4 border-primary-600 border-t-transparent rounded-full animate-spin" />
-      </div>
-    )
-  }
-
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* HEADER */}
-      <div className="flex items-center gap-3">
-        <div className="p-3 rounded-xl bg-primary-100 text-primary-700">
-          <LogOut className="w-6 h-6" />
+      {/* HEADER PRINCIPAL */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="p-3 rounded-xl bg-primary-100 text-primary-700">
+            <LogOut className="w-6 h-6" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900"># Registro de Check-out</h1>
+            <p className="text-gray-500">Gestión de salidas y liquidación de huéspedes hospedados</p>
+          </div>
         </div>
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900"># Registro de Check-out</h1>
-          <p className="text-gray-500">Búsqueda de huésped o habitación activa</p>
-        </div>
+        <button
+          type="button"
+          onClick={fetchEstadasActivas}
+          disabled={loading}
+          className="btn btn-secondary btn-sm flex items-center gap-1.5 self-start sm:self-auto"
+        >
+          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          <span>Actualizar lista</span>
+        </button>
       </div>
 
+      {/* SECCIÓN 1: HUÉSPEDES ACTIVOS (POR DEFECTO) Y BUSCADOR */}
       <section className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-        {/* BUSCADOR CON DROPDOWN */}
-        <div className="relative" ref={searchRef}>
-          <div className="flex items-center gap-3 p-4 border-b bg-gray-50">
-            <Search className="w-5 h-5 text-gray-400 shrink-0" />
+        {/* Barra superior de búsqueda y conteo */}
+        <div className="p-4 border-b bg-gray-50/75 flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <h2 className="text-base font-semibold text-gray-900">Huéspedes Hospedados Actualmente</h2>
+            <span className="text-xs bg-primary-100 text-primary-800 font-semibold px-2.5 py-0.5 rounded-full">
+              {filteredEstadias.length} {filteredEstadias.length === 1 ? 'activo' : 'activos'}
+            </span>
+          </div>
+
+          <div className="relative w-full md:w-80">
+            <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
               value={searchTerm}
-              onChange={handleSearchChange}
-              onFocus={() => {
-                if (searchTerm.trim()) setShowDropdown(true)
-              }}
+              onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="Buscar por nombre, documento o habitación..."
-              className="w-full border-0 bg-transparent outline-none placeholder:text-gray-400"
+              className="w-full pl-9 pr-8 py-2 text-sm bg-white border border-gray-200 rounded-lg outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-100 transition-all"
             />
             {searchTerm && (
               <button
                 type="button"
-                onClick={() => {
-                  setSearchTerm('')
-                  setSelectedEstadia(null)
-                  setShowDropdown(false)
-                }}
-                className="p-1 text-gray-400 hover:text-gray-600 shrink-0"
+                onClick={() => setSearchTerm('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 text-gray-400 hover:text-gray-600 rounded"
               >
-                <X className="w-4 h-4" />
+                <X className="w-3.5 h-3.5" />
               </button>
             )}
           </div>
+        </div>
 
-          {/* DROPDOWN DE RESULTADOS */}
-          {showDropdown && searchTerm.trim() && (
-            <div className="absolute z-20 left-0 right-0 bg-white border border-gray-200 border-t-0 rounded-b-xl shadow-lg max-h-64 overflow-y-auto">
-              {filteredEstadias.length === 0 ? (
-                <div className="px-4 py-6 text-center text-sm text-gray-500">
-                  <Search className="w-6 h-6 mx-auto mb-2 text-gray-300" />
-                  No se encontraron resultados para &ldquo;<span className="font-medium text-gray-700">{searchTerm}</span>&rdquo;
-                </div>
-              ) : (
-                filteredEstadias.map((estadia) => {
-                  const estadiaId = estadia.id_estadia || estadia.id
-                  return (
-                    <button
-                      key={estadiaId}
-                      type="button"
-                      onMouseDown={() => selectEstadia(estadia)}
-                      className="w-full text-left px-4 py-3 hover:bg-primary-50 border-b border-gray-100 last:border-b-0 transition-colors"
-                    >
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-sm font-semibold text-gray-900">
-                            {`${estadia.nombres || ''} ${estadia.apellidos || ''}`.trim()}
-                          </p>
-                          <p className="text-xs text-gray-500">
-                            Doc: {estadia.numero_documento || '-'} · Hab. {estadia.numero_habitacion || '-'}
-                          </p>
+        {/* Contenido de huéspedes activos */}
+        <div className="p-5">
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="w-8 h-8 border-4 border-primary-600 border-t-transparent rounded-full animate-spin" />
+            </div>
+          ) : estadasActivas.length === 0 ? (
+            /* Mensaje amigable cuando no hay huéspedes activos */
+            <div className="py-12 px-4 text-center bg-gray-50/60 rounded-xl border border-dashed border-gray-200">
+              <div className="w-14 h-14 mx-auto rounded-full bg-blue-50 text-blue-600 flex items-center justify-center mb-3">
+                <BedDouble className="w-7 h-7" />
+              </div>
+              <h3 className="text-base font-semibold text-gray-800">No hay huéspedes hospedados actualmente</h3>
+              <p className="text-sm text-gray-500 mt-1 max-w-md mx-auto">
+                En este momento no hay estadías con estado activo en el hotel. Todas las habitaciones se encuentran desocupadas o pendientes de registro.
+              </p>
+            </div>
+          ) : filteredEstadias.length === 0 ? (
+            /* Mensaje cuando no hay resultados de búsqueda */
+            <div className="py-10 px-4 text-center bg-gray-50/60 rounded-xl border border-dashed border-gray-200">
+              <Search className="w-8 h-8 mx-auto text-gray-400 mb-2" />
+              <h3 className="text-sm font-semibold text-gray-800">No se encontraron huéspedes coincidentes</h3>
+              <p className="text-xs text-gray-500 mt-1">
+                No hay ninguna estadía activa que coincida con &ldquo;<span className="font-medium text-gray-700">{searchTerm}</span>&rdquo;.
+              </p>
+              <button
+                type="button"
+                onClick={() => setSearchTerm('')}
+                className="mt-3 text-xs font-semibold text-primary-600 hover:underline"
+              >
+                Limpiar filtro de búsqueda
+              </button>
+            </div>
+          ) : (
+            /* Cuadrícula de tarjetas de huéspedes activos */
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+              {filteredEstadias.map((estadia) => {
+                const estadiaId = estadia.id_estadia || estadia.id
+                const isSelected = (selectedEstadia?.id_estadia || selectedEstadia?.id) === estadiaId
+                const nombreCompleto = `${estadia.nombres || ''} ${estadia.apellidos || ''}`.trim() || 'Huésped sin nombre'
+                const fechaCheckin = estadia.fecha_checkin || estadia.check_in
+                const fechaCheckoutPrevista = estadia.fecha_checkout_prevista || estadia.check_out
+
+                return (
+                  <div
+                    key={estadiaId}
+                    onClick={() => selectEstadia(estadia)}
+                    className={`group relative rounded-xl border p-4 transition-all cursor-pointer flex flex-col justify-between ${
+                      isSelected
+                        ? 'border-primary-500 bg-primary-50/30 ring-2 ring-primary-500 shadow-sm'
+                        : 'border-gray-200 bg-white hover:border-primary-400 hover:shadow-md'
+                    }`}
+                  >
+                    <div>
+                      {/* Cabecera de la tarjeta: Huésped + Habitación */}
+                      <div className="flex items-start justify-between gap-3 mb-3">
+                        <div className="flex items-center gap-3">
+                          <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm shrink-0 ${
+                            isSelected ? 'bg-primary-600 text-white' : 'bg-primary-100 text-primary-700'
+                          }`}>
+                            <User className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <h3 className="text-sm font-bold text-gray-900 group-hover:text-primary-700 transition-colors">
+                              {nombreCompleto}
+                            </h3>
+                            <p className="text-xs text-gray-500 flex items-center gap-1">
+                              <FileText className="w-3 h-3" />
+                              <span>Doc: {estadia.numero_documento || estadia.documento || '-'}</span>
+                            </p>
+                          </div>
                         </div>
-                        <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium ml-2 shrink-0">
-                          {estadia.estado || 'Activa'}
-                        </span>
+
+                        <div className="text-right shrink-0">
+                          <span className="inline-block px-2.5 py-1 text-xs font-bold rounded-lg bg-primary-100 text-primary-800">
+                            Hab. {estadia.numero_habitacion || estadia.habitacion?.numero || '-'}
+                          </span>
+                          {estadia.tipo_habitacion && (
+                            <p className="text-[11px] text-gray-500 mt-0.5">{estadia.tipo_habitacion}</p>
+                          )}
+                        </div>
                       </div>
-                      <p className="text-xs text-gray-400 mt-0.5">
-                        Check-in: {estadia.fecha_checkin ? new Date(estadia.fecha_checkin).toLocaleDateString() : '-'}
-                      </p>
-                    </button>
-                  )
-                })
-              )}
+
+                      {/* Detalles de la estadía */}
+                      <div className="space-y-1.5 py-2 border-t border-b border-gray-100 text-xs">
+                        <div className="flex items-center justify-between text-gray-600">
+                          <span className="flex items-center gap-1">
+                            <Calendar className="w-3.5 h-3.5 text-gray-400" />
+                            <span>Entrada:</span>
+                          </span>
+                          <span className="font-medium text-gray-800">{formatFechaHora(fechaCheckin)}</span>
+                        </div>
+
+                        <div className="flex items-center justify-between text-gray-600">
+                          <span className="flex items-center gap-1">
+                            <Clock className="w-3.5 h-3.5 text-gray-400" />
+                            <span>Días hospedado:</span>
+                          </span>
+                          <span className="font-semibold text-blue-700 bg-blue-50 px-2 py-0.5 rounded">
+                            {calcularDiasHospedado(fechaCheckin)}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center justify-between text-gray-600">
+                          <span className="flex items-center gap-1">
+                            <Calendar className="w-3.5 h-3.5 text-gray-400" />
+                            <span>Salida prevista:</span>
+                          </span>
+                          <span className="font-medium text-gray-800">{formatFechaHora(fechaCheckoutPrevista)}</span>
+                        </div>
+
+                        {estadia.telefono && (
+                          <div className="flex items-center justify-between text-gray-600">
+                            <span className="flex items-center gap-1">
+                              <Phone className="w-3.5 h-3.5 text-gray-400" />
+                              <span>Teléfono:</span>
+                            </span>
+                            <span className="font-medium text-gray-800">{estadia.telefono}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Botón de selección */}
+                    <div className="mt-3 pt-1">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          selectEstadia(estadia)
+                        }}
+                        className={`w-full py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors ${
+                          isSelected
+                            ? 'bg-primary-600 text-white'
+                            : 'bg-gray-100 text-gray-700 hover:bg-primary-600 hover:text-white'
+                        }`}
+                      >
+                        {isSelected ? (
+                          <>
+                            <CheckCircle className="w-3.5 h-3.5" />
+                            <span>Huésped Seleccionado</span>
+                          </>
+                        ) : (
+                          <>
+                            <span>Seleccionar para Check-out</span>
+                            <ArrowRight className="w-3.5 h-3.5" />
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           )}
         </div>
+      </section>
 
-        {/* CONTENIDO PRINCIPAL */}
+      {/* SECCIÓN 2: FORMULARIO DE CHECK-OUT Y LIQUIDACIÓN */}
+      <section className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+        {/* Banner de Huésped Seleccionado */}
+        {selectedEstadia ? (
+          <div className="p-4 bg-primary-50/80 border-b border-primary-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-primary-600 text-white flex items-center justify-center font-bold text-sm shrink-0">
+                {selectedEstadia.nombres?.[0] || 'H'}
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-base font-bold text-gray-900">
+                    {`${selectedEstadia.nombres || ''} ${selectedEstadia.apellidos || ''}`.trim()}
+                  </span>
+                  <span className="text-xs bg-primary-600 text-white font-semibold px-2 py-0.5 rounded-full">
+                    Hab. {selectedEstadia.numero_habitacion || selectedEstadia.habitacion?.numero}
+                  </span>
+                </div>
+                <p className="text-xs text-gray-600">
+                  Doc: {selectedEstadia.numero_documento || selectedEstadia.documento || '-'} · Estadía #{selectedEstadia.id_estadia || selectedEstadia.id}
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setSelectedEstadia(null)}
+              className="btn btn-secondary btn-sm text-xs self-start sm:self-auto"
+            >
+              Cambiar huésped / Ver todos
+            </button>
+          </div>
+        ) : (
+          <div className="p-4 bg-gray-50 border-b text-center text-sm text-gray-500 font-medium">
+            Selecciona un huésped de la lista superior para liquidar su cuenta y procesar la salida.
+          </div>
+        )}
+
+        {/* CONTENIDO PRINCIPAL: 2 COLUMNAS */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 p-5">
           {/* COLUMNA IZQUIERDA */}
           <div className="space-y-4">
@@ -383,13 +582,26 @@ const CheckOut = () => {
               <div className="space-y-2 text-sm">
                 {selectedEstadia ? (
                   <>
-                    <div><span className="font-medium text-gray-700">Nombre:</span> <span className="text-gray-900">{`${selectedEstadia.nombres || ''} ${selectedEstadia.apellidos || ''}`.trim()}</span></div>
-                    <div><span className="font-medium text-gray-700">Documento:</span> <span className="text-gray-900">{selectedEstadia.numero_documento || ''}</span></div>
-                    <div><span className="font-medium text-gray-700">Contacto:</span> <span className="text-gray-900">{selectedEstadia.telefono || selectedEstadia.contacto || ''}</span></div>
+                    <div>
+                      <span className="font-medium text-gray-700">Nombre:</span>{' '}
+                      <span className="text-gray-900">{`${selectedEstadia.nombres || ''} ${selectedEstadia.apellidos || ''}`.trim()}</span>
+                    </div>
+                    <div>
+                      <span className="font-medium text-gray-700">Documento:</span>{' '}
+                      <span className="text-gray-900">{selectedEstadia.numero_documento || selectedEstadia.documento || '-'}</span>
+                    </div>
+                    <div>
+                      <span className="font-medium text-gray-700">Contacto:</span>{' '}
+                      <span className="text-gray-900">{selectedEstadia.telefono || selectedEstadia.contacto || '-'}</span>
+                    </div>
+                    <div>
+                      <span className="font-medium text-gray-700">Email:</span>{' '}
+                      <span className="text-gray-900">{selectedEstadia.email || '-'}</span>
+                    </div>
                   </>
                 ) : (
                   <>
-                    <div><span className="font-medium text-gray-700">Nombre:</span> <span className="text-gray-400 italic text-xs">Seleccione una estadía</span></div>
+                    <div><span className="font-medium text-gray-700">Nombre:</span> <span className="text-gray-400 italic text-xs">Seleccione un huésped</span></div>
                     <div><span className="font-medium text-gray-700">Documento:</span> <span className="text-gray-400">-</span></div>
                     <div><span className="font-medium text-gray-700">Contacto:</span> <span className="text-gray-400">-</span></div>
                   </>
@@ -403,9 +615,22 @@ const CheckOut = () => {
               <div className="space-y-2 text-sm">
                 {selectedEstadia ? (
                   <>
-                    <div><span className="font-medium text-gray-700">Check-in:</span> <span className="text-gray-900">{selectedEstadia.fecha_checkin ? new Date(selectedEstadia.fecha_checkin).toLocaleDateString() : ''}</span></div>
-                    <div><span className="font-medium text-gray-700">Check-out previsto:</span> <span className="text-gray-900">{selectedEstadia.fecha_checkout_prevista ? new Date(selectedEstadia.fecha_checkout_prevista).toLocaleDateString() : ''}</span></div>
-                    <div><span className="font-medium text-gray-700">Noches:</span> <span className="text-gray-900">{calcularNoches()}</span></div>
+                    <div>
+                      <span className="font-medium text-gray-700">Check-in:</span>{' '}
+                      <span className="text-gray-900">{formatFechaHora(selectedEstadia.fecha_checkin || selectedEstadia.check_in)}</span>
+                    </div>
+                    <div>
+                      <span className="font-medium text-gray-700">Check-out previsto:</span>{' '}
+                      <span className="text-gray-900">{formatFechaHora(selectedEstadia.fecha_checkout_prevista || selectedEstadia.check_out)}</span>
+                    </div>
+                    <div>
+                      <span className="font-medium text-gray-700">Noches a liquidar:</span>{' '}
+                      <span className="text-gray-900 font-semibold">{calcularNoches()} noche(s)</span>
+                    </div>
+                    <div>
+                      <span className="font-medium text-gray-700">Tarifa por noche:</span>{' '}
+                      <span className="text-gray-900">Q{Number(getPrecioNoche()).toFixed(2)}</span>
+                    </div>
                   </>
                 ) : (
                   <>
@@ -426,7 +651,7 @@ const CheckOut = () => {
                 ) : (
                   cargos.map((cargo) => (
                     <div key={cargo.id} className="grid grid-cols-12 gap-2 items-center">
-                      <div className="col-span-4">
+                      <div className="col-span-5">
                         <input
                           type="text"
                           value={cargo.descripcion || ''}
@@ -445,14 +670,14 @@ const CheckOut = () => {
                           className="input text-sm"
                         />
                       </div>
-                      <div className="col-span-4">
+                      <div className="col-span-3">
                         <input
                           type="number"
                           value={cargo.precio || ''}
                           min="0"
                           step="0.01"
                           onChange={(e) => actualizarCargo(cargo.id, 'precio', e.target.value)}
-                          placeholder="Precio"
+                          placeholder="Precio Q"
                           className="input text-sm"
                         />
                       </div>
@@ -506,9 +731,18 @@ const CheckOut = () => {
               <div className="space-y-2 text-sm">
                 {selectedEstadia ? (
                   <>
-                    <div><span className="font-medium text-gray-700">Número:</span> <span className="text-gray-900">{selectedEstadia.numero_habitacion || ''}</span></div>
-                    <div><span className="font-medium text-gray-700">Tipo:</span> <span className="text-gray-900">{selectedEstadia.tipo_habitacion || ''}</span></div>
-                    <div><span className="font-medium text-gray-700">Piso:</span> <span className="text-gray-900">{selectedEstadia.piso || ''}</span></div>
+                    <div>
+                      <span className="font-medium text-gray-700">Número:</span>{' '}
+                      <span className="text-gray-900 font-bold">{selectedEstadia.numero_habitacion || selectedEstadia.habitacion?.numero || ''}</span>
+                    </div>
+                    <div>
+                      <span className="font-medium text-gray-700">Tipo:</span>{' '}
+                      <span className="text-gray-900">{selectedEstadia.tipo_habitacion || ''}</span>
+                    </div>
+                    <div>
+                      <span className="font-medium text-gray-700">Piso:</span>{' '}
+                      <span className="text-gray-900">{selectedEstadia.piso || '-'}</span>
+                    </div>
                   </>
                 ) : (
                   <>
@@ -520,19 +754,69 @@ const CheckOut = () => {
               </div>
             </div>
 
-            {/* Método de Pago */}
+            {/* Fecha y Hora de Salida */}
             <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
-              <div className="font-semibold text-gray-900 mb-3">Método de Pago</div>
-              <select
-                value={formData.metodo_pago}
-                onChange={(e) => setFormData({ ...formData, metodo_pago: e.target.value })}
-                className="input"
-              >
-                <option value="">Seleccione</option>
-                {METODOS_PAGO.map((m) => (
-                  <option key={m} value={m}>{m}</option>
-                ))}
-              </select>
+              <div className="font-semibold text-gray-900 mb-3">Fecha y Hora de Salida Efectiva</div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Fecha</label>
+                  <input
+                    type="date"
+                    value={formData.fecha_salida}
+                    onChange={(e) => setFormData({ ...formData, fecha_salida: e.target.value })}
+                    className="input text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Hora</label>
+                  <input
+                    type="time"
+                    value={formData.hora_salida}
+                    onChange={(e) => setFormData({ ...formData, hora_salida: e.target.value })}
+                    className="input text-sm"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Método de Pago y Facturación */}
+            <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 space-y-3">
+              <div className="font-semibold text-gray-900 mb-2">Pago y Facturación</div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Método de Pago</label>
+                <select
+                  value={formData.metodo_pago}
+                  onChange={(e) => setFormData({ ...formData, metodo_pago: e.target.value })}
+                  className="input text-sm"
+                >
+                  {METODOS_PAGO.map((m) => (
+                    <option key={m} value={m}>{m}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Referencia de Pago (opcional)</label>
+                <input
+                  type="text"
+                  value={formData.referencia}
+                  onChange={(e) => setFormData({ ...formData, referencia: e.target.value })}
+                  placeholder="Ej. Ref bancaria, voucher..."
+                  className="input text-sm"
+                />
+              </div>
+
+              <div className="pt-2 border-t border-gray-200">
+                <label className="flex items-center gap-2 text-sm text-gray-800 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={formData.genera_factura}
+                    onChange={(e) => setFormData({ ...formData, genera_factura: e.target.checked })}
+                    className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                  />
+                  <span>Generar factura comercial automáticamente</span>
+                </label>
+              </div>
             </div>
 
             {/* Cálculo del Total */}
@@ -543,7 +827,7 @@ const CheckOut = () => {
               </div>
               <div className="space-y-1 text-sm text-amber-700">
                 <div className="flex justify-between">
-                  <span>Alojamiento ({calcularNoches()} noche(s) × Q{getPrecioNoche()})</span>
+                  <span>Alojamiento ({calcularNoches()} noche(s) × Q{Number(getPrecioNoche()).toFixed(2)})</span>
                   <span>Q{calcularSubtotalAlojamiento().toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between">
@@ -561,10 +845,10 @@ const CheckOut = () => {
               </div>
             </div>
 
-            {/* BOTONES LADO A LADO */}
+            {/* BOTONES DE ACCIÓN */}
             <div className="space-y-3">
               <div className="flex gap-3">
-                {/* Extender estadía — izquierda */}
+                {/* Extender estadía */}
                 <button
                   type="button"
                   onClick={() => setShowExtender((prev) => !prev)}
@@ -575,7 +859,7 @@ const CheckOut = () => {
                   Extender estadía
                 </button>
 
-                {/* Registrar Check-out — derecha */}
+                {/* Registrar Check-out */}
                 <button
                   type="button"
                   onClick={registrarCheckout}
@@ -678,4 +962,3 @@ const CheckOut = () => {
 }
 
 export default CheckOut
-

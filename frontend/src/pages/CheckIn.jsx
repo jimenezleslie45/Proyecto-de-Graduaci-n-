@@ -14,14 +14,19 @@ const CheckIn = () => {
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
 
+  const getFechaHoy = () => new Date().toISOString().split('T')[0]
+  const getHoraActual = () => new Date().toTimeString().slice(0, 5)
+
   // Form states matching design without placeholders
   const [formData, setFormData] = useState({
     nombre: '',
     apellido: '',
     numero_documento: '',
     telefono: '',
-    fecha_entrada: '',
+    fecha_entrada: getFechaHoy(),
+    hora_entrada: getHoraActual(),
     fecha_salida_estimada: '',
+    hora_salida_estimada: '12:00',
     email: '',
     tipo_documento: 'CI'
   })
@@ -117,6 +122,15 @@ const CheckIn = () => {
       return
     }
 
+    // Construir datetime con fecha y hora
+    const entradaDateTime = formData.hora_entrada
+      ? `${formData.fecha_entrada}T${formData.hora_entrada}`
+      : formData.fecha_entrada
+
+    const salidaDateTime = formData.hora_salida_estimada
+      ? `${formData.fecha_salida_estimada}T${formData.hora_salida_estimada}`
+      : formData.fecha_salida_estimada
+
     // Obtener la primera habitación disponible
     const habSeleccionada = habitacionesDisponibles[0]
     const idHabitacion = habSeleccionada?.id || habSeleccionada?.id_habitacion || 1
@@ -139,7 +153,10 @@ const CheckIn = () => {
       const payload = {
         id_habitacion: Number(idHabitacion),
         id_huesped: Number(guestId),
-        fecha_checkout_prevista: formData.fecha_salida_estimada,
+        fecha_checkin: entradaDateTime,
+        hora_checkin: formData.hora_entrada,
+        fecha_checkout_prevista: salidaDateTime,
+        hora_checkout_prevista: formData.hora_salida_estimada,
         numero_adultos: 1,
         numero_ninos: 0,
         precio_noche: Number(habSeleccionada?.precio_base ?? habSeleccionada?.precio ?? 100),
@@ -158,8 +175,10 @@ const CheckIn = () => {
         apellido: '',
         numero_documento: '',
         telefono: '',
-        fecha_entrada: '',
+        fecha_entrada: getFechaHoy(),
+        hora_entrada: getHoraActual(),
         fecha_salida_estimada: '',
+        hora_salida_estimada: '12:00',
         email: '',
         tipo_documento: 'CI'
       })
@@ -270,6 +289,20 @@ const CheckIn = () => {
                 />
               </div>
 
+              {/* Hora de entrada */}
+              <div>
+                <label className="block text-xs font-semibold text-[#5a6b7c] mb-1.5">
+                  Hora de entrada
+                </label>
+                <input
+                  type="time"
+                  value={formData.hora_entrada}
+                  onChange={(e) => setFormData({ ...formData, hora_entrada: e.target.value })}
+                  className="w-full bg-white border border-[#d8d0be] rounded-xl px-3.5 py-2.5 text-sm text-[#1f2d3d] focus:outline-none focus:ring-2 focus:ring-[#213547]/20 focus:border-[#213547]"
+                  required
+                />
+              </div>
+
               {/* Fecha de salida estimada */}
               <div>
                 <label className="block text-xs font-semibold text-[#5a6b7c] mb-1.5">
@@ -278,7 +311,22 @@ const CheckIn = () => {
                 <input
                   type="date"
                   value={formData.fecha_salida_estimada}
+                  min={formData.fecha_entrada || getFechaHoy()}
                   onChange={(e) => setFormData({ ...formData, fecha_salida_estimada: e.target.value })}
+                  className="w-full bg-white border border-[#d8d0be] rounded-xl px-3.5 py-2.5 text-sm text-[#1f2d3d] focus:outline-none focus:ring-2 focus:ring-[#213547]/20 focus:border-[#213547]"
+                  required
+                />
+              </div>
+
+              {/* Hora de salida estimada */}
+              <div>
+                <label className="block text-xs font-semibold text-[#5a6b7c] mb-1.5">
+                  Hora de salida estimada
+                </label>
+                <input
+                  type="time"
+                  value={formData.hora_salida_estimada}
+                  onChange={(e) => setFormData({ ...formData, hora_salida_estimada: e.target.value })}
                   className="w-full bg-white border border-[#d8d0be] rounded-xl px-3.5 py-2.5 text-sm text-[#1f2d3d] focus:outline-none focus:ring-2 focus:ring-[#213547]/20 focus:border-[#213547]"
                   required
                 />
