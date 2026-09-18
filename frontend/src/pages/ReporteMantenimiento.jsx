@@ -427,12 +427,12 @@ if (!formData.descripcion.trim()) {
           ) : (
             <div className="space-y-3 max-h-96 overflow-y-auto pr-2">
               {historial.map((ticket) => (
-                <div key={ticket.id} className="border rounded-lg p-4 hover:shadow-md transition-shadow">
+                <div key={ticket.id_ticket || ticket.id} className="border rounded-lg p-4 hover:shadow-md transition-shadow">
                   <div className="flex justify-between items-start mb-2">
                     <div>
-                      <p className="font-semibold">#{ticket.numero_ticket}</p>
+                      <p className="font-semibold">#{ticket.id_ticket || ticket.id}</p>
                       <p className="text-sm text-gray-500">
-                        {ticket.fecha_reportado ? new Date(ticket.fecha_reportado).toLocaleDateString() : '-'}
+                        {ticket.created_at ? new Date(ticket.created_at).toLocaleDateString() : '-'}
                       </p>
                     </div>
                     <div className="flex gap-2">
@@ -445,12 +445,9 @@ if (!formData.descripcion.trim()) {
                     </div>
                   </div>
                   <p className="text-sm font-medium text-primary-700">
-                    {ticket.categoria_nombre || ticket.categoria?.nombre || 'Categoría'}
+                    {ticket.categoria_nombre || 'Categoría'}
                   </p>
-                  <p className="text-sm text-gray-600 mt-1">{ticket.descripcion}</p>
-                  {ticket.afecta_habitabilidad == 1 && (
-                    <p className="text-xs text-red-600 mt-1">⚠️ Afecta la habitabilidad</p>
-                  )}
+                  <p className="text-sm text-gray-600 mt-1">{ticket.tipo_falla || ticket.descripcion}</p>
                 </div>
               ))}
             </div>

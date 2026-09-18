@@ -48,6 +48,10 @@ const GestionLimpieza = () => {
     prioridad: 2,
     notas: ''
   })
+  const [buscarEmpleado, setBuscarEmpleado] = useState('')
+  const [buscarEmpleadoAsig, setBuscarEmpleadoAsig] = useState('')
+  const [showEmpSugg, setShowEmpSugg] = useState(false)
+  const [showEmpSuggAsig, setShowEmpSuggAsig] = useState(false)
 
   const rolActual = (usuario?.rol || 'limpieza').toString().toLowerCase().trim()
   const esAdminORecpcion = rolActual === 'admin' || rolActual === 'recepcion'
@@ -94,13 +98,22 @@ const GestionLimpieza = () => {
       prioridad: 2,
       observaciones: ''
     })
+    setBuscarEmpleado('')
+    setShowEmpSugg(false)
     setShowCreateModal(true)
   }
 
   const handleCreate = async (e) => {
     e.preventDefault()
+    const prioridadMap = { 1: 'Urgente', 2: 'Normal', 3: 'Baja' }
+    const payload = {
+      id_habitacion: formData.id_habitacion,
+      id_empleado_asignado: formData.id_empleado_asignado || undefined,
+      prioridad: prioridadMap[formData.prioridad] || 'Normal',
+      observaciones: formData.observaciones
+    }
     try {
-      await api.post('/limpieza/tareas', formData)
+      await api.post('/limpieza/tareas', payload)
       toast.success('Tarea creada exitosamente')
       setShowCreateModal(false)
       fetchTareas()
@@ -116,6 +129,8 @@ const GestionLimpieza = () => {
       prioridad: tarea.prioridad || 2,
       notas: tarea.observaciones || ''
     })
+    setBuscarEmpleadoAsig(tarea.nombre_asignado || '')
+    setShowEmpSuggAsig(false)
     fetchOptions()
     setShowAssignModal(true)
   }
@@ -176,7 +191,7 @@ const GestionLimpieza = () => {
 
   const handleIniciar = async (tarea) => {
     try {
-      await api.put(`/limpieza/tareas/${tarea.id}`, { estado: 'EnProceso' })
+      await api.put(`/limpieza/tareas/${tarea.id}`, { accion: 'iniciar' })
       toast.success('Tarea iniciada')
       fetchTareas()
     } catch (error) {
@@ -186,7 +201,7 @@ const GestionLimpieza = () => {
 
   const handleCompletar = async (tarea) => {
     try {
-      await api.put(`/limpieza/tareas/${tarea.id}`, { estado: 'Completada' })
+      await api.put(`/limpieza/tareas/${tarea.id}`, { accion: 'completar' })
       toast.success('Tarea completada exitosamente')
       fetchTareas()
     } catch (error) {
@@ -488,18 +503,55 @@ const GestionLimpieza = () => {
                   ))}
                 </select>
               </div>
-              <div>
+              <div className="relative">
                 <label className="label">Empleado Asignado</label>
-                <select
-                  value={formData.id_empleado_asignado}
-                  onChange={(e) => setFormData({ ...formData, id_empleado_asignado: e.target.value })}
+                <input
+                  type="text"
                   className="input"
-                >
-                  <option value="">Sin asignar</option>
-                  {empleados.map(e => (
-                    <option key={e.id} value={e.id}>{e.nombre}</option>
-                  ))}
-                </select>
+                  placeholder="Buscar por nombre..."
+                  value={buscarEmpleado}
+                  onChange={(e) => {
+                    setBuscarEmpleado(e.target.value)
+                    setFormData({ ...formData, id_empleado_asignado: '' })
+                    setShowEmpSugg(true)
+                  }}
+                  onFocus={() => setShowEmpSugg(true)}
+                  onBlur={() => setTimeout(() => setShowEmpSugg(false), 150)}
+                  autoComplete="off"
+                />
+                {showEmpSugg && (
+                  <ul className="absolute z-50 w-full bg-white border border-slate-200 rounded-lg shadow-lg mt-1 max-h-44 overflow-y-auto">
+                    <li
+                      className="px-3 py-2 text-sm text-gray-400 hover:bg-slate-50 cursor-pointer"
+                      onMouseDown={() => {
+                        setBuscarEmpleado('')
+                        setFormData({ ...formData, id_empleado_asignado: '' })
+                        setShowEmpSugg(false)
+                      }}
+                    >
+                      Sin asignar
+                    </li>
+                    {empleados
+                      .filter(e => e.nombre?.toLowerCase().includes(buscarEmpleado.toLowerCase()))
+                      .map(e => (
+                        <li
+                          key={e.id_empleado}
+                          className="px-3 py-2 text-sm hover:bg-blue-50 cursor-pointer"
+                          onMouseDown={() => {
+                            setBuscarEmpleado(e.nombre)
+                            setFormData({ ...formData, id_empleado_asignado: e.id_empleado })
+                            setShowEmpSugg(false)
+                          }}
+                        >
+                          {e.nombre}
+                          <span className="ml-2 text-xs text-gray-400">{e.rol}</span>
+                        </li>
+                      ))}
+                    {empleados.filter(e => e.nombre?.toLowerCase().includes(buscarEmpleado.toLowerCase())).length === 0 && (
+                      <li className="px-3 py-2 text-sm text-gray-400">Sin resultados</li>
+                    )}
+                  </ul>
+                )}
               </div>
               <div>
                 <label className="label">Tipo de Tarea</label>
@@ -554,18 +606,55 @@ const GestionLimpieza = () => {
               Habitación #{tareaSeleccionada.numero_habitacion || tareaSeleccionada.id_habitacion}
             </p>
             <form onSubmit={handleAssign} className="space-y-4">
-              <div>
+              <div className="relative">
                 <label className="label">Personal de Limpieza</label>
-                <select
-                  value={formAsignacion.id_empleado_asignado}
-                  onChange={(e) => setFormAsignacion({ ...formAsignacion, id_empleado_asignado: e.target.value })}
+                <input
+                  type="text"
                   className="input"
-                >
-                  <option value="">Sin asignar</option>
-                  {empleados.map(e => (
-                    <option key={e.id} value={e.id}>{e.nombre}</option>
-                  ))}
-                </select>
+                  placeholder="Buscar por nombre..."
+                  value={buscarEmpleadoAsig}
+                  onChange={(e) => {
+                    setBuscarEmpleadoAsig(e.target.value)
+                    setFormAsignacion({ ...formAsignacion, id_empleado_asignado: '' })
+                    setShowEmpSuggAsig(true)
+                  }}
+                  onFocus={() => setShowEmpSuggAsig(true)}
+                  onBlur={() => setTimeout(() => setShowEmpSuggAsig(false), 150)}
+                  autoComplete="off"
+                />
+                {showEmpSuggAsig && (
+                  <ul className="absolute z-50 w-full bg-white border border-slate-200 rounded-lg shadow-lg mt-1 max-h-44 overflow-y-auto">
+                    <li
+                      className="px-3 py-2 text-sm text-gray-400 hover:bg-slate-50 cursor-pointer"
+                      onMouseDown={() => {
+                        setBuscarEmpleadoAsig('')
+                        setFormAsignacion({ ...formAsignacion, id_empleado_asignado: '' })
+                        setShowEmpSuggAsig(false)
+                      }}
+                    >
+                      Sin asignar
+                    </li>
+                    {empleados
+                      .filter(e => e.nombre?.toLowerCase().includes(buscarEmpleadoAsig.toLowerCase()))
+                      .map(e => (
+                        <li
+                          key={e.id_empleado}
+                          className="px-3 py-2 text-sm hover:bg-blue-50 cursor-pointer"
+                          onMouseDown={() => {
+                            setBuscarEmpleadoAsig(e.nombre)
+                            setFormAsignacion({ ...formAsignacion, id_empleado_asignado: e.id_empleado })
+                            setShowEmpSuggAsig(false)
+                          }}
+                        >
+                          {e.nombre}
+                          <span className="ml-2 text-xs text-gray-400">{e.rol}</span>
+                        </li>
+                      ))}
+                    {empleados.filter(e => e.nombre?.toLowerCase().includes(buscarEmpleadoAsig.toLowerCase())).length === 0 && (
+                      <li className="px-3 py-2 text-sm text-gray-400">Sin resultados</li>
+                    )}
+                  </ul>
+                )}
               </div>
               <div>
                 <label className="label">Prioridad</label>

@@ -161,8 +161,8 @@ const EjecucionLimpieza = () => {
     if (!selectedTarea) return
     try {
       await api.put(`/limpieza/tareas/${selectedTarea.id}`, {
-        estado: 'EnProceso',
-        fecha_inicio: new Date().toISOString()
+        accion: 'iniciar',
+        observaciones
       })
       toast.success('Limpieza iniciada')
       startTsRef.current = Date.now()
@@ -189,11 +189,12 @@ const EjecucionLimpieza = () => {
 
     try {
       await api.put(`/limpieza/tareas/${selectedTarea.id}`, {
-        estado: 'Completada',
-        observaciones,
-        fecha_fin: new Date().toISOString()
+        accion: 'completar',
+        observaciones
       })
       toast.success('Tarea finalizada. Habitación DISPONIBLE')
+      detenerInterval()
+      setEstadoTimer('finalizado')
       limpiarSeleccion()
       fetchTareas()
     } catch (error) {
@@ -232,7 +233,7 @@ const EjecucionLimpieza = () => {
 
   const getNombreHabitacion = (t) => t.numero_habitacion || t.habitacion?.numero || t.id_habitacion
   const getPiso = (t) => t.piso || t.habitacion?.piso || '—'
-  const getAsignado = (t) => t.nombre_empleado || t.empleado_asignado?.nombre || 'Sin asignar'
+  const getAsignado = (t) => t.nombre_asignado || t.nombre_empleado || t.empleado_asignado?.nombre || 'Sin asignar'
 
   if (loading) {
     return (

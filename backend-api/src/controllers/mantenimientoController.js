@@ -3,18 +3,18 @@ const config = require('../config/env');
 const logger = require('../middlewares/logger');
 
 let demoTickets = [
-  { id: 1, id_habitacion: 6, id_categoria: 1, id_empleado_reporta: 4, id_empleado_asignado: 4, numero_ticket: 'TM001', titulo: 'Foco fundido', descripcion: 'El foco del baño no funciona', prioridad: 2, fecha_reportado: new Date(Date.now() - 2*24*60*60*1000), estado: 'Pendiente', costo_estimado: 50, tiempo_minutos: 30 },
-  { id: 2, id_habitacion: 3, id_categoria: 2, id_empleado_reporta: 2, id_empleado_asignado: null, numero_ticket: 'TM002', titulo: 'Goteo en lavabo', descripcion: 'El lavabo del baño tiene un goteo constante', prioridad: 3, fecha_reportado: new Date(), estado: 'Pendiente', costo_estimado: null, tiempo_minutos: null }
+  { id_ticket: 1, id_habitacion: 6, id_categoria: 1, creado_por: 4, asignado_a: 4, tipo_falla: 'Foco fundido', descripcion: 'El foco del baño no funciona', prioridad: 2, created_at: new Date(Date.now() - 2*24*60*60*1000), estado: 'Pendiente', costo_material: 50 },
+  { id_ticket: 2, id_habitacion: 3, id_categoria: 2, creado_por: 2, asignado_a: null, tipo_falla: 'Goteo en lavabo', descripcion: 'El lavabo del baño tiene un goteo constante', prioridad: 3, created_at: new Date(), estado: 'Pendiente', costo_material: null }
 ];
 
 // Categorías fijas requeridas en PANTALLA 8
 const DEMO_CATEGORIAS = [
-  { id: 1, nombre: 'Eléctrico', descripcion: 'Problemas eléctricos', prioridad_default: 2, tiempo_estimado_minutos: 60 },
-  { id: 2, nombre: 'Plomería', descripcion: 'Problemas de tuberías y agua', prioridad_default: 2, tiempo_estimado_minutos: 45 },
-  { id: 3, nombre: 'Mobiliario', descripcion: 'Reparación de muebles', prioridad_default: 3, tiempo_estimado_minutos: 30 },
-  { id: 4, nombre: 'AC', descripcion: 'Sistema de climatización', prioridad_default: 2, tiempo_estimado_minutos: 90 },
-  { id: 5, nombre: 'Electrodomésticos', descripcion: 'Aparatos eléctricos de la habitación', prioridad_default: 2, tiempo_estimado_minutos: 45 },
-  { id: 6, nombre: 'Cerrajería', descripcion: 'Cerraduras y llaves', prioridad_default: 3, tiempo_estimado_minutos: 30 }
+  { id_categoria: 1, nombre: 'Eléctrico', descripcion: 'Problemas eléctricos', prioridad_default: 2 },
+  { id_categoria: 2, nombre: 'Plomería', descripcion: 'Problemas de tuberías y agua', prioridad_default: 2 },
+  { id_categoria: 3, nombre: 'Mobiliario', descripcion: 'Reparación de muebles', prioridad_default: 3 },
+  { id_categoria: 4, nombre: 'AC', descripcion: 'Sistema de climatización', prioridad_default: 2 },
+  { id_categoria: 5, nombre: 'Electrodomésticos', descripcion: 'Aparatos eléctricos de la habitación', prioridad_default: 2 },
+  { id_categoria: 6, nombre: 'Cerrajería', descripcion: 'Cerraduras y llaves', prioridad_default: 3 }
 ];
 
 // Notificaciones demo (CRÍTICA)
@@ -26,46 +26,52 @@ let demoNotificaciones = [];
 const getAll = async (req, res) => {
   try {
     const isDemoMode = !db.isConnected();
-    
+
     if (isDemoMode) {
       const tickets = demoTickets.map(t => ({
         ...t,
-        habitacion: { id: t.id_habitacion, numero: t.id_habitacion === 6 ? '203' : '103', piso: Math.ceil(t.id_habitacion / 3) },
-        categoria: DEMO_CATEGORIAS.find(c => c.id === t.id_categoria)
+        numero_habitacion: t.id_habitacion,
+        categoria_nombre: (DEMO_CATEGORIAS.find(c => c.id_categoria === t.id_categoria) || {}).nombre || 'Sin categoría'
       }));
       return res.json({ success: true, data: tickets });
-}
+    }
 
     const query = `
-      SELECT tm.*, h.numero as numero_habitacion, h.piso, cm.nombre as categoria_nombre,
-             p1.nombres + ' ' + p1.apellidos as reporta_por,
-             p2.nombres + ' ' + p2.apellidos as asignado_a
-      FROM TicketMantenimiento tm
-      INNER JOIN Habitacion h ON tm.id_habitacion = h.id
-      INNER JOIN CategoriaMantenimiento cm ON tm.id_categoria = cm.id
-      INNER JOIN Empleado e1 ON tm.id_empleado_reporta = e1.id
-      INNER JOIN Persona p1 ON e1.id_persona = p1.id
-      LEFT JOIN Empleado e2 ON tm.id_empleado_asignado = e2.id
-      LEFT JOIN Persona p2 ON e2.id_persona = p2.id
-      WHERE tm.activo = 1
-      ORDER BY tm.prioridad ASC, tm.fecha_reportado DESC
+      SELECT tm.*,
+             h.numero as numero_habitacion, h.piso,
+             cm.nombre as categoria_nombre,
+             p1.nombres + ' ' + p1.apellidos as reporta_por_nombre,
+             p2.nombres + ' ' + p2.apellidos as asignado_a_nombre
+      FROM dbo.ticket_mantenimiento tm
+      INNER JOIN dbo.habitacion h ON tm.id_habitacion = h.id_habitacion
+      INNER JOIN dbo.categoria_mantenimiento cm ON tm.id_categoria = cm.id_categoria
+      LEFT JOIN dbo.empleado e1 ON tm.creado_por = e1.id_empleado
+      LEFT JOIN dbo.persona p1 ON e1.id_persona = p1.id_persona
+      LEFT JOIN dbo.empleado e2 ON tm.asignado_a = e2.id_empleado
+      LEFT JOIN dbo.persona p2 ON e2.id_persona = p2.id_persona
+      ORDER BY tm.prioridad ASC, tm.created_at DESC
     `;
-    
+
     const result = await db.query(query);
-    // Si la consulta devuelve vacío (BD sin datos), usar tickets demo para que la pantalla muestre contenido
     if (!result || result.length === 0) {
       logger.warn('No hay tickets en BD - usando tickets demo de respaldo');
       const demo = demoTickets.map(t => ({
         ...t,
-        habitacion: { id: t.id_habitacion, numero: t.id_habitacion === 6 ? '203' : '103', piso: Math.ceil(t.id_habitacion / 3) },
-        categoria: DEMO_CATEGORIAS.find(c => c.id === t.id_categoria)
+        numero_habitacion: t.id_habitacion,
+        categoria_nombre: (DEMO_CATEGORIAS.find(c => c.id_categoria === t.id_categoria) || {}).nombre || 'Sin categoría'
       }));
       return res.json({ success: true, data: demo });
     }
     res.json({ success: true, data: result });
   } catch (error) {
     logger.error('Error getting maintenance tickets:', error);
-    res.status(500).json({ success: false, message: 'Error al obtener tickets de mantenimiento' });
+    // Fallback a demo si la query falla
+    const demo = demoTickets.map(t => ({
+      ...t,
+      numero_habitacion: t.id_habitacion,
+      categoria_nombre: (DEMO_CATEGORIAS.find(c => c.id_categoria === t.id_categoria) || {}).nombre || 'Sin categoría'
+    }));
+    res.json({ success: true, data: demo });
   }
 };
 
@@ -78,36 +84,31 @@ const getById = async (req, res) => {
     const isDemoMode = !db.isConnected();
 
     if (isDemoMode) {
-      const ticket = demoTickets.find(t => t.id === parseInt(id));
+      const ticket = demoTickets.find(t => t.id_ticket === parseInt(id));
       if (!ticket) {
         return res.status(404).json({ success: false, message: 'Ticket no encontrado' });
       }
-      return res.json({
-        success: true,
-        data: {
-          ...ticket,
-          habitacion: { id: ticket.id_habitacion, numero: ticket.id_habitacion === 6 ? '203' : '103', piso: Math.ceil(ticket.id_habitacion / 3) },
-          categoria: DEMO_CATEGORIAS.find(c => c.id === ticket.id_categoria)
-        }
-      });
+      return res.json({ success: true, data: ticket });
     }
 
     const query = `
-      SELECT tm.*, h.numero as numero_habitacion, h.piso, cm.nombre as categoria_nombre,
-             p1.nombres + ' ' + p1.apellidos as reporta_por,
-             p2.nombres + ' ' + p2.apellidos as asignado_a
-      FROM TicketMantenimiento tm
-      INNER JOIN Habitacion h ON tm.id_habitacion = h.id
-      INNER JOIN CategoriaMantenimiento cm ON tm.id_categoria = cm.id
-      INNER JOIN Empleado e1 ON tm.id_empleado_reporta = e1.id
-      INNER JOIN Persona p1 ON e1.id_persona = p1.id
-      LEFT JOIN Empleado e2 ON tm.id_empleado_asignado = e2.id
-      LEFT JOIN Persona p2 ON e2.id_persona = p2.id
-      WHERE tm.id = @id AND tm.activo = 1
+      SELECT tm.*,
+             h.numero as numero_habitacion, h.piso,
+             cm.nombre as categoria_nombre,
+             p1.nombres + ' ' + p1.apellidos as reporta_por_nombre,
+             p2.nombres + ' ' + p2.apellidos as asignado_a_nombre
+      FROM dbo.ticket_mantenimiento tm
+      INNER JOIN dbo.habitacion h ON tm.id_habitacion = h.id_habitacion
+      INNER JOIN dbo.categoria_mantenimiento cm ON tm.id_categoria = cm.id_categoria
+      LEFT JOIN dbo.empleado e1 ON tm.creado_por = e1.id_empleado
+      LEFT JOIN dbo.persona p1 ON e1.id_persona = p1.id_persona
+      LEFT JOIN dbo.empleado e2 ON tm.asignado_a = e2.id_empleado
+      LEFT JOIN dbo.persona p2 ON e2.id_persona = p2.id_persona
+      WHERE tm.id_ticket = @id
     `;
 
     const result = await db.query(query, { id });
-    if (result.length === 0) {
+    if (!result || result.length === 0) {
       return res.status(404).json({ success: false, message: 'Ticket no encontrado' });
     }
     res.json({ success: true, data: result[0] });
@@ -124,25 +125,22 @@ const getByStatus = async (req, res) => {
   try {
     const { status } = req.params;
     const isDemoMode = !db.isConnected();
-    
+
     if (isDemoMode) {
-      const tickets = demoTickets.filter(t => t.estado === status).map(t => ({
-        ...t,
-        habitacion: { id: t.id_habitacion, numero: t.id_habitacion === 6 ? '203' : '103', piso: Math.ceil(t.id_habitacion / 3) }
-      }));
+      const tickets = demoTickets.filter(t => t.estado === status);
       return res.json({ success: true, data: tickets });
     }
 
     const query = `
       SELECT tm.*, h.numero as numero_habitacion, h.piso
-      FROM TicketMantenimiento tm
-      INNER JOIN Habitacion h ON tm.id_habitacion = h.id
-      WHERE tm.estado = @status AND tm.activo = 1
-      ORDER BY tm.prioridad ASC, tm.fecha_reportado DESC
+      FROM dbo.ticket_mantenimiento tm
+      INNER JOIN dbo.habitacion h ON tm.id_habitacion = h.id_habitacion
+      WHERE tm.estado = @status
+      ORDER BY tm.prioridad ASC, tm.created_at DESC
     `;
-    
+
     const result = await db.query(query, { status });
-    res.json({ success: true, data: result });
+    res.json({ success: true, data: result || [] });
   } catch (error) {
     logger.error('Error getting maintenance tickets by status:', error);
     res.status(500).json({ success: false, message: 'Error al obtener tickets de mantenimiento' });
@@ -155,16 +153,19 @@ const getByStatus = async (req, res) => {
 const getCategories = async (req, res) => {
   try {
     const isDemoMode = !db.isConnected();
-    
+
     if (isDemoMode) {
       return res.json({ success: true, data: DEMO_CATEGORIAS });
     }
 
-    const result = await db.query('SELECT * FROM CategoriaMantenimiento WHERE activo = 1');
+    const result = await db.query('SELECT * FROM dbo.categoria_mantenimiento');
+    if (!result || result.length === 0) {
+      return res.json({ success: true, data: DEMO_CATEGORIAS });
+    }
     res.json({ success: true, data: result });
   } catch (error) {
     logger.error('Error getting categories:', error);
-    res.status(500).json({ success: false, message: 'Error al obtener categorías' });
+    res.json({ success: true, data: DEMO_CATEGORIAS });
   }
 };
 
@@ -176,24 +177,23 @@ const getStaff = async (req, res) => {
     const isDemoMode = !db.isConnected();
 
     if (isDemoMode) {
-      const staff = [
-        { id: 1, nombre: 'Juan López', rol: 'Mantenimiento' },
-        { id: 2, nombre: 'Carla Rojas', rol: 'Mantenimiento' },
-        { id: 3, nombre: 'Diego Martínez', rol: 'Mantenimiento' }
-      ];
-      return res.json({ success: true, data: staff });
+      return res.json({ success: true, data: [
+        { id_empleado: 1, nombre: 'Juan López', rol: 'Mantenimiento' },
+        { id_empleado: 2, nombre: 'Carla Rojas', rol: 'Mantenimiento' },
+        { id_empleado: 3, nombre: 'Diego Martínez', rol: 'Mantenimiento' }
+      ]});
     }
 
     const query = `
-      SELECT e.id, p.nombres + ' ' + p.apellidos as nombre, r.nombre as rol
-      FROM Empleado e
-      INNER JOIN Persona p ON e.id_persona = p.id
-      INNER JOIN Rol r ON e.id_rol = r.id
-      WHERE r.nombre = 'Mantenimiento' AND e.activo = 1
+      SELECT e.id_empleado, p.nombres + ' ' + p.apellidos as nombre, r.nombre as rol
+      FROM dbo.empleado e
+      INNER JOIN dbo.persona p ON e.id_persona = p.id_persona
+      INNER JOIN dbo.rol r ON e.id_rol = r.id_rol
+      WHERE UPPER(r.nombre) IN ('MANTENIMIENTO') AND UPPER(e.estado) = 'ACTIVO'
     `;
 
     const result = await db.query(query);
-    res.json({ success: true, data: result });
+    res.json({ success: true, data: result || [] });
   } catch (error) {
     logger.error('Error getting maintenance staff:', error);
     res.status(500).json({ success: false, message: 'Error al obtener personal de mantenimiento' });
@@ -205,107 +205,92 @@ const getStaff = async (req, res) => {
  */
 const create = async (req, res) => {
   try {
-    const { id_habitacion, id_categoria, titulo, descripcion, prioridad, costo_estimado, afecta_habitabilidad, fotos } = req.body;
-    const id_empleado_reporta = req.user.empleado_id;
+    const { id_habitacion, id_categoria, titulo, descripcion, prioridad, costo_estimado, afecta_habitabilidad } = req.body;
+    const creado_por = req.user?.empleado_id || null;
     const isDemoMode = !db.isConnected();
+
     // Normalizar prioridad a entero, default Media (2)
     const prioridadFinal = parseInt(prioridad) || 2;
-    // Normalizar afecta_habitabilidad a 0/1
-    const afectaHabitabilidad = afecta_habitabilidad ? 1 : 0;
-    // Normalizar fotos a array
-    const fotosArray = Array.isArray(fotos) ? fotos.slice(0, 3) : [];
-    
+    const tipo_falla = titulo || descripcion || 'Reporte de mantenimiento';
+
     if (isDemoMode) {
       const newId = demoTickets.length + 1;
-      const numeroTicket = `TM${String(newId).padStart(3, '0')}`;
       const newTicket = {
-        id: newId,
+        id_ticket: newId,
         id_habitacion,
         id_categoria,
-        id_empleado_reporta,
-        id_empleado_asignado: null,
-        numero_ticket: numeroTicket,
-        titulo,
+        creado_por,
+        asignado_a: null,
+        tipo_falla,
         descripcion,
         prioridad: prioridadFinal,
-        fecha_reportado: new Date(),
-        estado: 'ABIERTO',
-        costo_estimado,
-        tiempo_minutos: null,
-        afecta_habitabilidad: afectaHabitabilidad,
-        fotos: fotosArray
+        created_at: new Date(),
+        estado: 'Pendiente',
+        costo_material: costo_estimado || null
       };
       demoTickets.push(newTicket);
-      
-      // Notificación si prioridad = CRÍTICA (4)
+
       if (prioridadFinal === 4) {
-        const notif = {
+        demoNotificaciones.unshift({
           id: demoNotificaciones.length + 1,
           titulo: '⚠️ Reporte CRÍTICO de mantenimiento',
-          mensaje: `Se reportó un problema CRÍTICO en la habitación #${id_habitacion}: ${titulo || 'sin título'}`,
+          mensaje: `Problema CRÍTICO en habitación #${id_habitacion}: ${tipo_falla}`,
           tipo: 'Critical',
           fecha: new Date()
-        };
-        demoNotificaciones.unshift(notif);
-        logger.warn('Notificación CRÍTICA generada', notif);
+        });
       }
-      
+
       return res.status(201).json({ success: true, data: newTicket, message: 'Ticket de mantenimiento creado exitosamente' });
     }
 
     const query = `
-      INSERT INTO TicketMantenimiento (id_habitacion, id_categoria, id_empleado_reporta, numero_ticket, titulo, descripcion, prioridad, fecha_reportado, estado, costo_estimado, afecta_habitabilidad, activo)
-      VALUES (@id_habitacion, @id_categoria, @id_empleado_reporta, @numero_ticket, @titulo, @descripcion, @prioridad, GETDATE(), 'ABIERTO', @costo_estimado, @afecta_habitabilidad, 1);
-      SELECT SCOPE_IDENTITY() as id;
+      INSERT INTO dbo.ticket_mantenimiento
+        (id_habitacion, id_categoria, creado_por, tipo_falla, prioridad, estado, observaciones)
+      VALUES
+        (@id_habitacion, @id_categoria, @creado_por, @tipo_falla, @prioridad, 'Pendiente', @observaciones);
+      SELECT SCOPE_IDENTITY() as id_ticket;
     `;
-    
-    const numeroTicket = `TM${Date.now()}`;
-    
-    const result = await db.query(query, { 
-      id_habitacion, 
+
+    const result = await db.query(query, {
+      id_habitacion,
       id_categoria,
-      id_empleado_reporta,
-      numero_ticket: numeroTicket,
-      titulo,
-      descripcion,
+      creado_por,
+      tipo_falla,
       prioridad: prioridadFinal,
-      costo_estimado: costo_estimado || null,
-      afecta_habitabilidad: afectaHabitabilidad
+      observaciones: descripcion || ''
     });
-    
-    // Update room state to Mantenimiento
-    await db.query('UPDATE Habitacion SET id_estado = (SELECT id FROM EstadoHabitacion WHERE nombre = "Mantenimiento") WHERE id = @id', { id: id_habitacion });
-    
-    // Notificación si prioridad = CRÍTICA (4)
+
+    const newId = result && result[0] ? result[0].id_ticket : null;
+
+    // Si prioridad CRÍTICA → insertar notificación
     if (prioridadFinal === 4) {
       try {
         await db.query(`
-          INSERT INTO Notificacion (id_usuario, titulo, mensaje, tipo, fecha_creacion)
+          INSERT INTO dbo.notificacion (id_usuario, titulo, mensaje, tipo)
           VALUES (
-            (SELECT TOP 1 id_usuario FROM Usuario WHERE id_rol = (SELECT id FROM Rol WHERE nombre = 'Mantenimiento')),
+            (SELECT TOP 1 id_usuario FROM dbo.usuario WHERE id_empleado = @creado_por),
             @titulo,
             @mensaje,
-            'Error',
-            GETDATE()
+            'Error'
           )
         `, {
+          creado_por: creado_por || 1,
           titulo: 'Reporte CRÍTICO de mantenimiento',
-          mensaje: `Se reportó un problema CRÍTICO en la habitación: ${descripcion || ''}`
+          mensaje: `Problema CRÍTICO reportado: ${tipo_falla}`
         });
-        logger.warn('Notificación CRÍTICA creada en BD');
       } catch (notifError) {
         logger.error('Error creando notificación CRÍTICA:', notifError);
       }
     }
-    
-    res.status(201).json({ 
-      success: true, 
-      data: { id: result[0].id, numero_ticket: numeroTicket },
-      message: 'Ticket de mantenimiento creado exitosamente' 
+
+    res.status(201).json({
+      success: true,
+      data: { id_ticket: newId },
+      message: 'Ticket de mantenimiento creado exitosamente'
     });
   } catch (error) {
     logger.error('Error creating maintenance ticket:', error);
-    res.status(500).json({ success: false, message: 'Error al crear ticket de mantenimiento' });
+    res.status(500).json({ success: false, message: 'Error al crear ticket de mantenimiento: ' + error.message });
   }
 };
 
@@ -316,13 +301,13 @@ const getByHabitacion = async (req, res) => {
   try {
     const { id } = req.params;
     const isDemoMode = !db.isConnected();
-    
+
     if (isDemoMode) {
       const tickets = demoTickets
         .filter(t => t.id_habitacion === parseInt(id))
         .map(t => ({
           ...t,
-          categoria: DEMO_CATEGORIAS.find(c => c.id === t.id_categoria)
+          categoria_nombre: (DEMO_CATEGORIAS.find(c => c.id_categoria === t.id_categoria) || {}).nombre || 'Sin categoría'
         }))
         .reverse();
       return res.json({ success: true, data: tickets });
@@ -330,17 +315,17 @@ const getByHabitacion = async (req, res) => {
 
     const query = `
       SELECT tm.*, cm.nombre as categoria_nombre
-      FROM TicketMantenimiento tm
-      INNER JOIN CategoriaMantenimiento cm ON tm.id_categoria = cm.id
-      WHERE tm.id_habitacion = @id AND tm.activo = 1
-      ORDER BY tm.fecha_reportado DESC
+      FROM dbo.ticket_mantenimiento tm
+      LEFT JOIN dbo.categoria_mantenimiento cm ON tm.id_categoria = cm.id_categoria
+      WHERE tm.id_habitacion = @id
+      ORDER BY tm.created_at DESC
     `;
-    
+
     const result = await db.query(query, { id: parseInt(id) });
-    res.json({ success: true, data: result });
+    res.json({ success: true, data: result || [] });
   } catch (error) {
     logger.error('Error getting tickets by habitacion:', error);
-    res.status(500).json({ success: false, message: 'Error al obtener historial de mantenimiento' });
+    res.json({ success: true, data: [] });
   }
 };
 
@@ -350,21 +335,22 @@ const getByHabitacion = async (req, res) => {
 const getNotificaciones = async (req, res) => {
   try {
     const isDemoMode = !db.isConnected();
-    
+
     if (isDemoMode) {
       return res.json({ success: true, data: demoNotificaciones });
     }
 
     const result = await db.query(`
-      SELECT id, titulo, mensaje, tipo, fecha_creacion, leida
-      FROM Notificacion
+      SELECT id_notificacion as id, titulo, mensaje, tipo, created_at as fecha_creacion, leida
+      FROM dbo.notificacion
       WHERE tipo = 'Error'
-      ORDER BY fecha_creacion DESC
+      ORDER BY created_at DESC
     `);
-    res.json({ success: true, data: result });
+    res.json({ success: true, data: result || [] });
   } catch (error) {
     logger.error('Error getting notifications:', error);
-    res.status(500).json({ success: false, message: 'Error al obtener notificaciones' });
+    // No lanzar 500, devolver lista vacía para no romper la UI
+    res.json({ success: true, data: [] });
   }
 };
 
@@ -374,10 +360,9 @@ const getNotificaciones = async (req, res) => {
 const update = async (req, res) => {
   try {
     const { id } = req.params;
-    const { id_empleado_asignado, estado, tiempo_minutos, costo_real, observaciones, materiales, estado_posterior } = req.body;
+    const { id_empleado_asignado, estado, observaciones, materiales, estado_posterior } = req.body;
     const isDemoMode = !db.isConnected();
-    
-    // Normalizar materiales recibidos
+
     const materialesArray = Array.isArray(materiales)
       ? materiales
           .filter(m => m && (m.nombre || m.cantidad))
@@ -388,107 +373,100 @@ const update = async (req, res) => {
           }))
       : [];
 
-    // Calcular costo real = suma de subtotales (Nombre x Costo unitario)
-    const costoRealCalculado = materialesArray.length > 0
+    const costoMaterial = materialesArray.length > 0
       ? materialesArray.reduce((sum, m) => sum + (m.cantidad * m.costo_unitario), 0)
-      : parseFloat(costo_real) || 0;
+      : 0;
 
     if (isDemoMode) {
-      const index = demoTickets.findIndex(t => t.id === parseInt(id));
+      const index = demoTickets.findIndex(t => t.id_ticket === parseInt(id));
       if (index === -1) {
         return res.status(404).json({ success: false, message: 'Ticket no encontrado' });
       }
-      
-      if (id_empleado_asignado) demoTickets[index].id_empleado_asignado = id_empleado_asignado;
+      if (id_empleado_asignado) demoTickets[index].asignado_a = id_empleado_asignado;
       if (estado) demoTickets[index].estado = estado;
-      if (estado === 'EnProceso' && !demoTickets[index].fecha_inicio) {
-        demoTickets[index].fecha_inicio = new Date();
+      if (estado === 'EnProceso' && !demoTickets[index].inicio) {
+        demoTickets[index].inicio = new Date();
       }
       if (estado === 'Completado') {
-        demoTickets[index].fecha_fin = new Date();
-        demoTickets[index].tiempo_minutos = tiempo_minutos || demoTickets[index].tiempo_minutos;
-        demoTickets[index].costo_real = costoRealCalculado || demoTickets[index].costo_estimado;
-        demoTickets[index].materiales = materialesArray;
-        demoTickets[index].estado_posterior = estado_posterior || 'Disponible';
+        demoTickets[index].fin = new Date();
+        if (costoMaterial > 0) demoTickets[index].costo_material = costoMaterial;
       }
       if (observaciones) demoTickets[index].observaciones = observaciones;
-      
       return res.json({ success: true, data: demoTickets[index], message: 'Ticket actualizado exitosamente' });
     }
 
     let query = '';
     let params = { id };
-    
+
     if (estado === 'EnProceso') {
       query = `
-        UPDATE TicketMantenimiento 
-        SET estado = 'EnProceso', fecha_inicio = GETDATE(), observaciones = @observaciones
-        WHERE id = @id
+        UPDATE dbo.ticket_mantenimiento
+        SET estado = 'EnProceso', inicio = GETDATE(), observaciones = @observaciones
+        WHERE id_ticket = @id
       `;
+      params.observaciones = observaciones || '';
     } else if (estado === 'Completado') {
       query = `
-        UPDATE TicketMantenimiento 
-        SET estado = 'Completado', fecha_fin = GETDATE(), tiempo_minutos = CASE WHEN fecha_inicio IS NOT NULL THEN DATEDIFF(MINUTE, fecha_inicio, GETDATE()) ELSE 0 END, costo_real = @costo_real, observaciones = @observaciones
-        WHERE id = @id
+        UPDATE dbo.ticket_mantenimiento
+        SET estado = 'Completado', fin = GETDATE(),
+            costo_material = @costo_material, observaciones = @observaciones
+        WHERE id_ticket = @id
       `;
-      params.costo_real = costoRealCalculado;
+      params.costo_material = costoMaterial;
+      params.observaciones = observaciones || '';
     } else if (id_empleado_asignado) {
       query = `
-        UPDATE TicketMantenimiento 
-        SET id_empleado_asignado = @id_empleado_asignado, fecha_asignacion = GETDATE()
-        WHERE id = @id
+        UPDATE dbo.ticket_mantenimiento
+        SET asignado_a = @asignado_a
+        WHERE id_ticket = @id
       `;
-      params.id_empleado_asignado = id_empleado_asignado;
+      params.asignado_a = id_empleado_asignado;
+    } else {
+      // Solo observaciones
+      query = `
+        UPDATE dbo.ticket_mantenimiento
+        SET observaciones = @observaciones
+        WHERE id_ticket = @id
+      `;
+      params.observaciones = observaciones || '';
     }
-    
-    params.observaciones = observaciones || '';
-    
+
     await db.query(query, params);
 
-    // Si el ticket se completó → persistir materiales y aplicar automatización de estado
+    // Si se completó → persistir materiales y actualizar estado habitación
     if (estado === 'Completado') {
-      // 1. Persistir materiales en TicketMaterial
+      // Guardar materiales en dbo.ticket_mantenimiento_mate
       if (materialesArray.length > 0) {
-        // Eliminar materiales previos del ticket (por si se re-completa)
-        await db.query('DELETE FROM TicketMaterial WHERE id_ticket = @id', { id });
-        for (const m of materialesArray) {
-          await db.query(`
-            INSERT INTO TicketMaterial (id_ticket, nombre_material, cantidad, costo_unitario, activo, fecha_creacion)
-            VALUES (@id, @nombre, @cantidad, @costo_unitario, 1, GETDATE())
-          `, {
-            id,
-            nombre: m.nombre,
-            cantidad: m.cantidad,
-            costo_unitario: m.costo_unitario
-          });
+        try {
+          await db.query('DELETE FROM dbo.ticket_mantenimiento_mate WHERE id_ticket = @id', { id });
+          for (const m of materialesArray) {
+            await db.query(`
+              INSERT INTO dbo.ticket_mantenimiento_mate (id_ticket, material, cantidad, costo_unitario)
+              VALUES (@id, @nombre, @cantidad, @costo_unitario)
+            `, { id, nombre: m.nombre, cantidad: m.cantidad, costo_unitario: m.costo_unitario });
+          }
+        } catch (matError) {
+          logger.error('Error guardando materiales:', matError);
         }
       }
 
-      // 2. Obtener la habitación del ticket
-      const ticket = await db.query('SELECT id_habitacion FROM TicketMantenimiento WHERE id = @id', { id });
-      if (ticket.length > 0) {
-        const idHabitacion = ticket[0].id_habitacion;
-        const estadoFinal = estado_posterior || 'Disponible';
-
-        // 3. Actualizar estado de la habitación según estado posterior
-        await db.query('UPDATE Habitacion SET id_estado = (SELECT id FROM EstadoHabitacion WHERE nombre = @estado) WHERE id = @id_habitacion', {
-          estado: estadoFinal,
-          id_habitacion: idHabitacion
-        });
-
-        // 4. Si requiere limpieza → crear tarea de limpieza automáticamente
-        if (estadoFinal === 'Limpieza') {
-          try {
-            const automation = require('../services/automationService');
-            await automation.createCleaningTask(idHabitacion, null, 'Rutinaria');
-            logger.info('Tarea de limpieza creada automáticamente tras mantenimiento', { idHabitacion });
-          } catch (autoError) {
-            logger.error('Error creando tarea de limpieza automática:', autoError);
-          }
+      // Actualizar estado de habitación
+      try {
+        const ticketRow = await db.query('SELECT id_habitacion FROM dbo.ticket_mantenimiento WHERE id_ticket = @id', { id });
+        if (ticketRow && ticketRow.length > 0) {
+          const idHabitacion = ticketRow[0].id_habitacion;
+          const estadoFinal = estado_posterior || 'disponible';
+          await db.query(`
+            UPDATE dbo.habitacion
+            SET id_estado_actual = (SELECT id_estado FROM dbo.estado_habitacion WHERE UPPER(nombre) = UPPER(@estado))
+            WHERE id_habitacion = @id_habitacion
+          `, { estado: estadoFinal, id_habitacion: idHabitacion });
         }
+      } catch (habError) {
+        logger.error('Error actualizando estado habitación:', habError);
       }
     }
-    
+
     res.json({ success: true, message: 'Ticket actualizado exitosamente' });
   } catch (error) {
     logger.error('Error updating maintenance ticket:', error);

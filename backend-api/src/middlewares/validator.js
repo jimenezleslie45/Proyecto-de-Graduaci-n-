@@ -254,12 +254,13 @@ const taskRules = {
       .isInt({ min: 1 })
       .withMessage('Empleado inválido'),
     body('tipo_tarea')
+      .optional()
       .isIn(['Rutinaria', 'CheckOut', 'Profunda'])
       .withMessage('Tipo de tarea inválido'),
     body('prioridad')
       .optional()
-      .isInt({ min: 1, max: 3 })
-      .withMessage('Prioridad debe estar entre 1 y 3')
+      .isIn(['Urgente', 'Normal', 'Baja'])
+      .withMessage("Prioridad debe ser 'Urgente', 'Normal' o 'Baja'")
   ],
   
   update: [
