@@ -230,7 +230,7 @@ const Monitor = () => {
         </button>
       )
     }
-    if (rol === 'mantenimiento' && habitacion.estado === 'Mantenimiento') {
+    if (rol === 'admin' && habitacion.estado === 'Mantenimiento') {
       acciones.push(
         <button
           key="mant"

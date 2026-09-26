@@ -8,7 +8,6 @@ const DEMO_USERS = [
   { id: 1, username: 'admin', password: 'admin123', id_rol: 1, id_empleado: 1, rol: 'admin', nombre: 'Administrador' },
   { id: 2, username: 'recepcionista', password: 'recepcion123', id_rol: 2, id_empleado: 2, rol: 'recepcion', nombre: 'Recepcionista' },
   { id: 3, username: 'limpieza', password: 'limpieza123', id_rol: 3, id_empleado: 3, rol: 'limpieza', nombre: 'Limpieza' },
-  { id: 4, username: 'mantenimiento', password: 'mantenimiento123', id_rol: 4, id_empleado: 4, rol: 'mantenimiento', nombre: 'Mantenimiento' },
 ];
 
 const createToken = (user, userRole) => {
@@ -142,8 +141,6 @@ const login = async (req, res) => {
       userRole = 'recepcion'; 
     } else if (roleId === 3 || roleId === 1004) {
       userRole = 'limpieza';
-    } else if (roleId === 4) {
-      userRole = 'mantenimiento';
     }
     logger.info('Rol asignado para el token:', { userRole });
 

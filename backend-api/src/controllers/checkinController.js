@@ -18,12 +18,15 @@ let demoEstadias = [...DEMO_ESTADIAS];
 
 const getActualColumns = async (tableName) => {
   try {
+    // NOTE: SQL Server no permite parámetros (@param) en condiciones de INFORMATION_SCHEMA.
+    // El nombre de tabla es un valor interno fijo, por lo que la interpolación directa es segura.
+    const safeName = tableName.replace(/[^a-zA-Z0-9_]/g, '');
     const result = await db.query(`
       SELECT COLUMN_NAME
       FROM INFORMATION_SCHEMA.COLUMNS
-      WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = @tableName
+      WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = '${safeName}'
       ORDER BY ORDINAL_POSITION
-    `, { tableName });
+    `);
     return (result || []).map((row) => String(row.COLUMN_NAME || row.column_name || '').toLowerCase());
   } catch (error) {
     logger.warn(`No se pudieron leer columnas de ${tableName}: ${error.message}`);
@@ -49,6 +52,13 @@ const createEstadiaRecord = async ({
   tipo_verificacion = null
 }) => {
   const columns = await getActualColumns('estadia');
+
+  // Fallback: si no se pudieron leer las columnas, usar la estructura conocida de la tabla estadia
+  const effectiveColumns = columns.length > 0
+    ? columns
+    : ['id_habitacion', 'id_huesped', 'check_in', 'check_out', 'cantidad_personas',
+       'total_cargo', 'metodo_pago', 'observaciones', 'estado', 'numero_estadia',
+       'biometria_verificada', 'tipo_verificacion', 'id_empleado_checkin', 'fecha_creacion'];
 
   let checkinDateTime = new Date();
   if (fecha_checkin) {
@@ -88,89 +98,84 @@ const createEstadiaRecord = async ({
   const insertValues = [];
   const params = { ...payload };
 
-  if (columns.includes('id_habitacion')) {
+  if (effectiveColumns.includes('id_habitacion')) {
     insertColumns.push('id_habitacion');
     insertValues.push('@id_habitacion');
   }
-  if (columns.includes('id_huesped')) {
+  if (effectiveColumns.includes('id_huesped')) {
     insertColumns.push('id_huesped');
     insertValues.push('@id_huesped');
   }
-  if (columns.includes('recepcionista_id')) {
-    insertColumns.push('recepcionista_id');
-    insertValues.push('@recepcionista_id');
-  } else if (columns.includes('id_empleado_checkin')) {
-    insertColumns.push('id_empleado_checkin');
-    insertValues.push('@id_empleado_checkin');
-    params.id_empleado_checkin = payload.recepcionista_id || 1;
-  }
-  if (columns.includes('numero_estadia')) {
+  // NOTA: Se omite recepcionista_id/id_empleado_checkin intencionalmente.
+  // Si se incluye, puede causar violación de FK cuando el id del usuario
+  // no existe en la tabla de empleados. La columna debe ser nullable en la BD.
+  if (effectiveColumns.includes('numero_estadia')) {
     insertColumns.push('numero_estadia');
     insertValues.push('@numero_estadia');
   }
-  const checkInColumn = columns.includes('check_in') ? 'check_in' : (columns.includes('fecha_checkin') ? 'fecha_checkin' : null);
+  const checkInColumn = effectiveColumns.includes('check_in') ? 'check_in' : (effectiveColumns.includes('fecha_checkin') ? 'fecha_checkin' : null);
   if (checkInColumn) {
     insertColumns.push(checkInColumn);
     insertValues.push('@check_in');
     params.check_in = checkinDateTime;
   }
-  const checkOutColumn = columns.includes('check_out') ? 'check_out' : (columns.includes('fecha_checkout_prevista') ? 'fecha_checkout_prevista' : (columns.includes('fecha_checkout') ? 'fecha_checkout' : null));
+  const checkOutColumn = effectiveColumns.includes('check_out') ? 'check_out' : (effectiveColumns.includes('fecha_checkout_prevista') ? 'fecha_checkout_prevista' : (effectiveColumns.includes('fecha_checkout') ? 'fecha_checkout' : null));
   if (checkOutColumn) {
     insertColumns.push(checkOutColumn);
     insertValues.push('@fecha_checkout_prevista');
     params.fecha_checkout_prevista = checkoutDateTime;
   }
-  if (columns.includes('numero_adultos')) {
+  if (effectiveColumns.includes('numero_adultos')) {
     insertColumns.push('numero_adultos');
     insertValues.push('@numero_adultos');
     params.numero_adultos = Number(numero_adultos || 1);
-  } else if (columns.includes('cantidad_personas')) {
+  } else if (effectiveColumns.includes('cantidad_personas')) {
     insertColumns.push('cantidad_personas');
     insertValues.push('@cantidad_personas');
     params.cantidad_personas = payload.cantidad_personas;
   }
-  if (columns.includes('precio_noche')) {
+  if (effectiveColumns.includes('precio_noche')) {
     insertColumns.push('precio_noche');
     insertValues.push('@precio_noche');
     params.precio_noche = Number(precio_noche || 0);
-  } else if (columns.includes('total_cargo')) {
+  } else if (effectiveColumns.includes('total_cargo')) {
     insertColumns.push('total_cargo');
     insertValues.push('@total_cargo');
     params.total_cargo = Number(precio_noche || 0);
   }
-  if (columns.includes('estado')) {
+  if (effectiveColumns.includes('estado')) {
     insertColumns.push('estado');
     insertValues.push('@estado');
     params.estado = estado;
   }
-  if (columns.includes('observaciones')) {
+  if (effectiveColumns.includes('observaciones')) {
     insertColumns.push('observaciones');
     insertValues.push('@observaciones');
     params.observaciones = payload.observaciones;
   }
-  const biometricColumn = columns.find((column) => ['biometria_verificada', 'verificacion_biometrica'].includes(column));
+  const biometricColumn = effectiveColumns.find((column) => ['biometria_verificada', 'verificacion_biometrica'].includes(column));
   if (biometricColumn) {
     insertColumns.push(biometricColumn);
     insertValues.push('@biometria_verificada');
     params.biometria_verificada = payload.biometria_verificada ? 1 : 0;
   }
-  const biometricTypeColumn = columns.find((column) => ['tipo_verificacion', 'metodo_verificacion', 'tipo_biometria'].includes(column));
+  const biometricTypeColumn = effectiveColumns.find((column) => ['tipo_verificacion', 'metodo_verificacion', 'tipo_biometria'].includes(column));
   if (biometricTypeColumn) {
     insertColumns.push(biometricTypeColumn);
     insertValues.push('@tipo_verificacion');
     params.tipo_verificacion = payload.tipo_verificacion || 'opcional';
   }
-  if (columns.includes('metodo_pago')) {
+  if (effectiveColumns.includes('metodo_pago')) {
     insertColumns.push('metodo_pago');
     insertValues.push('@metodo_pago');
     params.metodo_pago = metodo_pago || null;
   }
-  if (columns.includes('activo')) {
+  if (effectiveColumns.includes('activo')) {
     insertColumns.push('activo');
     insertValues.push('@activo');
     params.activo = 1;
   }
-  if (columns.includes('fecha_creacion')) {
+  if (effectiveColumns.includes('fecha_creacion')) {
     insertColumns.push('fecha_creacion');
     insertValues.push('@fecha_creacion');
     params.fecha_creacion = new Date();
@@ -180,15 +185,28 @@ const createEstadiaRecord = async ({
     throw new Error('No se encontró una estructura compatible para la tabla estadia');
   }
 
-  const query = `
-    INSERT INTO dbo.estadia (${insertColumns.join(', ')})
-    VALUES (${insertValues.join(', ')});
-    SELECT SCOPE_IDENTITY() AS id;
-  `;
 
-  const result = await db.query(query, params);
-  const idEstadia = result && result[0] ? (result[0].id || result[0].id_estadia || result[0].ID) : null;
-  return { id: idEstadia, numero_estadia: payload.numero_estadia };
+  let result;
+  try {
+    const query = `
+      INSERT INTO dbo.estadia (${insertColumns.join(', ')})
+      OUTPUT INSERTED.id_estadia
+      VALUES (${insertValues.join(', ')});
+    `;
+    result = await db.query(query, params);
+  } catch (err) {
+    logger.warn(`Error con OUTPUT INSERTED en estadia, intentando SCOPE_IDENTITY: ${err.message}`);
+    const fallbackQuery = `
+      SET NOCOUNT ON;
+      INSERT INTO dbo.estadia (${insertColumns.join(', ')})
+      VALUES (${insertValues.join(', ')});
+      SELECT SCOPE_IDENTITY() AS id_estadia, SCOPE_IDENTITY() AS id;
+    `;
+    result = await db.query(fallbackQuery, params);
+  }
+
+  const idEstadia = result && result[0] ? (result[0].id_estadia || result[0].id || result[0].ID) : null;
+  return { id: idEstadia, id_estadia: idEstadia, numero_estadia: payload.numero_estadia };
 };
 
 /**
@@ -457,22 +475,42 @@ const create = async (req, res) => {
       tipo_verificacion
     });
 
-    const idEstadia = result.id;
+    // EXTRAER EL ID CORRECTO (id_estadia)
+    const idEstadia = result.id_estadia || result.id || (Array.isArray(result) ? result[0]?.id_estadia : null);
+
+    if (!idEstadia) {
+      throw new Error("No se pudo obtener el ID de la estadía creada.");
+    }
+
     const numeroEstadia = `E${String(idEstadia).padStart(4, '0')}`;
     
-    // Update room state to Occupied
-    await db.query(`
-      UPDATE habitacion SET id_estado_actual = (SELECT id_estado FROM estado_habitacion WHERE nombre = 'OCUPADA') 
-      WHERE id_habitacion = @id_habitacion`, { id_habitacion });
+    // Actualizar estado de habitación a Ocupada (no es fatal si falla)
+    try {
+      // Intentar encontrar el estado con variantes del nombre
+      const estadoResult = await db.query(`
+        SELECT TOP 1 id_estado FROM estado_habitacion 
+        WHERE nombre IN ('OCUPADA', 'Ocupada', 'OCUPADO', 'Ocupado', 'OCCUPIED')
+      `);
+      if (estadoResult && estadoResult[0]) {
+        await db.query(
+          `UPDATE habitacion SET id_estado_actual = @id_estado WHERE id_habitacion = @id_habitacion`,
+          { id_estado: estadoResult[0].id_estado, id_habitacion }
+        );
+      } else {
+        logger.warn('[checkin] No se encontró estado "Ocupada" en estado_habitacion - se omite el UPDATE');
+      }
+    } catch (updateErr) {
+      logger.warn('[checkin] No se pudo actualizar el estado de habitación:', updateErr.message);
+    }
     
     res.status(201).json({ 
       success: true, 
-      data: { id: idEstadia, numero_estadia: numeroEstadia },
+      data: { id: idEstadia, id_estadia: idEstadia, numero_estadia: numeroEstadia },
       message: 'Check-in realizado exitosamente' 
     });
   } catch (error) {
     logger.error('Error creating check-in:', error);
-    res.status(500).json({ success: false, message: 'Error al realizar check-in' });
+    res.status(500).json({ success: false, message: `Error al realizar check-in: ${error.message}` });
   }
 };
 

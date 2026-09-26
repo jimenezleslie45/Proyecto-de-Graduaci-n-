@@ -10,6 +10,26 @@ const DEMO_HUESPEDES = [
 ];
 
 /**
+ * Obtiene las columnas reales de una tabla en la BD.
+ * NOTA: SQL Server no permite parámetros en INFORMATION_SCHEMA, se interpola directamente.
+ */
+const getTableColumns = async (tableName) => {
+  try {
+    const safeName = tableName.replace(/[^a-zA-Z0-9_]/g, '');
+    const result = await db.query(`
+      SELECT COLUMN_NAME
+      FROM INFORMATION_SCHEMA.COLUMNS
+      WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = '${safeName}'
+      ORDER BY ORDINAL_POSITION
+    `);
+    return (result || []).map((row) => String(row.COLUMN_NAME || row.column_name || '').toLowerCase());
+  } catch (error) {
+    logger.warn(`No se pudieron leer columnas de ${tableName}: ${error.message}`);
+    return [];
+  }
+};
+
+/**
  * Create a new guest (person + huesped)
  */
 const create = async (req, res) => {
@@ -38,48 +58,157 @@ const create = async (req, res) => {
       return res.status(201).json({ success: true, data: newHuesped, message: 'Huésped creado exitosamente' });
     }
 
-    // Insert persona real en dbo.persona: documento es una sola columna, sin tipo_documento/numero_documento ni telefono.
-    const documento = `${tipo_documento || 'CI'} ${numero_documento}`;
-    const personaResult = await db.query(`
-      INSERT INTO dbo.persona (nombres, apellidos, documento, email)
-      VALUES (@nombres, @apellidos, @documento, @email);
-      SELECT SCOPE_IDENTITY() as id_persona;
-    `, {
-      nombres,
-      apellidos,
-      documento,
-      email: email || ''
-    });
+    // -------------------------------------------------------
+    // 1. Leer columnas reales de dbo.persona
+    // -------------------------------------------------------
+    const personaCols = await getTableColumns('persona');
+    logger.info(`[huesped.create] Columnas de persona: ${personaCols.join(', ')}`);
 
-    const idPersona = personaResult[0].id_persona;
+    // Construir INSERT dinámico para dbo.persona
+    const personaInsertCols = [];
+    const personaInsertVals = [];
+    const personaParams = {};
 
-    // Insert teléfono real en dbo.persona_telefono en caso de venir en el body.
-    if (telefono) {
-      await db.query(`
-        INSERT INTO dbo.persona_telefono (id_persona, telefono, tipo, principal)
-        VALUES (@id_persona, @telefono, @tipo, @principal);
-      `, {
-        id_persona: idPersona,
-        telefono,
-        tipo: 'celular',
-        principal: 1
-      });
+    // nombres / primer_nombre
+    if (personaCols.includes('nombres')) {
+      personaInsertCols.push('nombres'); personaInsertVals.push('@nombres');
+      personaParams.nombres = nombres;
+    } else if (personaCols.includes('primer_nombre')) {
+      personaInsertCols.push('primer_nombre'); personaInsertVals.push('@nombres');
+      personaParams.nombres = nombres;
     }
 
-    // Insert huesped real en dbo.huesped: no tiene numero_huesped.
-    const huespedResult = await db.query(`
-      INSERT INTO dbo.huesped (id_persona, notas)
-      VALUES (@id_persona, @notas);
-      SELECT SCOPE_IDENTITY() as id_huesped;
-    `, { id_persona: idPersona, notas: '' });
+    // apellidos / primer_apellido
+    if (personaCols.includes('apellidos')) {
+      personaInsertCols.push('apellidos'); personaInsertVals.push('@apellidos');
+      personaParams.apellidos = apellidos;
+    } else if (personaCols.includes('primer_apellido')) {
+      personaInsertCols.push('primer_apellido'); personaInsertVals.push('@apellidos');
+      personaParams.apellidos = apellidos;
+    }
 
-    const idHuesped = huespedResult[0].id_huesped;
+    // documento (columna única que combina tipo + número)
+    if (personaCols.includes('documento')) {
+      personaInsertCols.push('documento'); personaInsertVals.push('@documento');
+      personaParams.documento = `${tipo_documento || 'CI'} ${numero_documento}`;
+    }
+
+    // numero_documento / nro_documento por separado
+    if (personaCols.includes('numero_documento')) {
+      personaInsertCols.push('numero_documento'); personaInsertVals.push('@numero_documento');
+      personaParams.numero_documento = numero_documento;
+    }
+    if (personaCols.includes('tipo_documento')) {
+      personaInsertCols.push('tipo_documento'); personaInsertVals.push('@tipo_documento');
+      personaParams.tipo_documento = tipo_documento || 'CI';
+    }
+
+    // email / correo
+    if (personaCols.includes('email')) {
+      personaInsertCols.push('email'); personaInsertVals.push('@email');
+      personaParams.email = email || '';
+    } else if (personaCols.includes('correo')) {
+      personaInsertCols.push('correo'); personaInsertVals.push('@email');
+      personaParams.email = email || '';
+    }
+
+    // telefono (si está en persona directamente)
+    if (personaCols.includes('telefono') && telefono) {
+      personaInsertCols.push('telefono'); personaInsertVals.push('@telefono_p');
+      personaParams.telefono_p = telefono;
+    }
+
+    if (personaInsertCols.length === 0) {
+      throw new Error('No se pudo determinar la estructura de la tabla persona');
+    }
+
+    const personaSQL = `
+      INSERT INTO dbo.persona (${personaInsertCols.join(', ')})
+      VALUES (${personaInsertVals.join(', ')});
+      SELECT SCOPE_IDENTITY() as id_persona;
+    `;
+    logger.info(`[huesped.create] SQL persona: ${personaSQL}`);
+
+    const personaResult = await db.query(personaSQL, personaParams);
+    const idPersona = personaResult && personaResult[0] ? personaResult[0].id_persona : null;
+
+    if (!idPersona) {
+      throw new Error('No se pudo obtener el ID de la persona insertada');
+    }
+
+    // -------------------------------------------------------
+    // 2. Insertar teléfono en persona_telefono (si existe la tabla)
+    // -------------------------------------------------------
+    if (telefono) {
+      try {
+        const telCols = await getTableColumns('persona_telefono');
+        if (telCols.includes('id_persona') && telCols.includes('telefono')) {
+          const telInsertCols = ['id_persona', 'telefono'];
+          const telInsertVals = ['@id_persona_tel', '@telefono'];
+          const telParams = { id_persona_tel: idPersona, telefono };
+
+          if (telCols.includes('tipo')) { telInsertCols.push('tipo'); telInsertVals.push('@tipo'); telParams.tipo = 'celular'; }
+          if (telCols.includes('principal')) { telInsertCols.push('principal'); telInsertVals.push('@principal'); telParams.principal = 1; }
+
+          await db.query(`
+            INSERT INTO dbo.persona_telefono (${telInsertCols.join(', ')})
+            VALUES (${telInsertVals.join(', ')});
+          `, telParams);
+        }
+      } catch (telError) {
+        // No es fatal si el teléfono falla
+        logger.warn(`[huesped.create] No se pudo insertar teléfono: ${telError.message}`);
+      }
+    }
+
+    // -------------------------------------------------------
+    // 3. Insertar en dbo.huesped
+    // -------------------------------------------------------
+    const huespedCols = await getTableColumns('huesped');
+    logger.info(`[huesped.create] Columnas de huesped: ${huespedCols.join(', ')}`);
+
+    const huespedInsertCols = [];
+    const huespedInsertVals = [];
+    const huespedParams = {};
+
+    if (huespedCols.includes('id_persona')) {
+      huespedInsertCols.push('id_persona'); huespedInsertVals.push('@id_persona_h');
+      huespedParams.id_persona_h = idPersona;
+    }
+    if (huespedCols.includes('notas')) {
+      huespedInsertCols.push('notas'); huespedInsertVals.push('@notas');
+      huespedParams.notas = '';
+    }
+    if (huespedCols.includes('observaciones')) {
+      huespedInsertCols.push('observaciones'); huespedInsertVals.push('@observaciones_h');
+      huespedParams.observaciones_h = '';
+    }
+
+    if (huespedInsertCols.length === 0) {
+      throw new Error('No se pudo determinar la estructura de la tabla huesped');
+    }
+
+    const huespedSQL = `
+      INSERT INTO dbo.huesped (${huespedInsertCols.join(', ')})
+      VALUES (${huespedInsertVals.join(', ')});
+      SELECT SCOPE_IDENTITY() as id_huesped;
+    `;
+    logger.info(`[huesped.create] SQL huesped: ${huespedSQL}`);
+
+    const huespedResult = await db.query(huespedSQL, huespedParams);
+    const idHuesped = huespedResult && huespedResult[0] ? huespedResult[0].id_huesped : null;
+
+    if (!idHuesped) {
+      throw new Error('No se pudo obtener el ID del huésped insertado');
+    }
+
     const numeroHuesped = `H${String(idHuesped).padStart(3, '0')}`;
 
     res.status(201).json({
       success: true,
       data: {
         id: idHuesped,
+        id_huesped: idHuesped,
         numero_huesped: numeroHuesped,
         id_persona: idPersona,
         nombres,
@@ -93,7 +222,7 @@ const create = async (req, res) => {
     });
   } catch (error) {
     logger.error('Error creating guest:', error);
-    res.status(500).json({ success: false, message: 'Error al crear huésped' });
+    res.status(500).json({ success: false, message: `Error al crear huésped: ${error.message}` });
   }
 };
 

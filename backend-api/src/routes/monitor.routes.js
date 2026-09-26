@@ -5,7 +5,7 @@ const { authenticate } = require('../middlewares/auth');
 const { isReceptionistOrAdmin, authorize } = require('../middlewares/roles');
 
 // GET /api/monitor/estados - Get all room statuses
-router.get('/estados', authenticate, authorize('admin', 'recepcion', 'limpieza', 'mantenimiento'), monitorController.getRoomStatuses);
+router.get('/estados', authenticate, authorize('admin', 'recepcion', 'limpieza'), monitorController.getRoomStatuses);
 
 // GET /api/monitor/resumen - Get status summary
 router.get('/resumen', authenticate, isReceptionistOrAdmin, monitorController.getStatusSummary);
@@ -14,6 +14,6 @@ router.get('/resumen', authenticate, isReceptionistOrAdmin, monitorController.ge
 router.get('/dashboard', authenticate, monitorController.getDashboard);
 
 // GET /api/monitor/pendientes - Get pending tasks
-router.get('/pendientes', authenticate, authorize('admin', 'recepcion', 'limpieza', 'mantenimiento'), monitorController.getPendingTasks);
+router.get('/pendientes', authenticate, authorize('admin', 'recepcion', 'limpieza'), monitorController.getPendingTasks);
 
 module.exports = router;

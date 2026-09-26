@@ -9,7 +9,6 @@ import {
   Shield,
   Bell,
   Sparkles,
-  Wrench,
 } from 'lucide-react'
 import { motion } from 'framer-motion'
 
@@ -32,13 +31,11 @@ const Login = () => {
     { id: 'admin', nombre: 'Administrador', icon: Shield },
     { id: 'recepcionista', nombre: 'Recepcionista', icon: Bell },
     { id: 'limpieza', nombre: 'Limpieza', icon: Sparkles },
-    { id: 'mantenimiento', nombre: 'Mantenimiento', icon: Wrench },
   ]
 
   const getHomeRoute = (rol) => {
     const rolNormalizado = rol == null ? null : String(rol).trim()
     if (rolNormalizado === 'Limpieza') return '/limpieza'
-    if (rolNormalizado === 'Mantenimiento') return '/mantenimiento'
     return '/panel'
   }
 
@@ -116,7 +113,7 @@ const Login = () => {
 
             {/* SELECCIÓN DE ROLES */}
             <div className="mb-5">
-              <div className="grid grid-cols-2 gap-2.5">
+              <div className="grid grid-cols-3 gap-2">
                 {roles.map((rol) => {
                   const IconComponent = rol.icon
                   const isSelected = rolSeleccionado === rol.id

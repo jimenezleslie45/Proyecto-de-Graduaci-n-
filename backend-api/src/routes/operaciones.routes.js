@@ -21,7 +21,7 @@ router.get('/checkin/activos', authenticate, canPerformOperations, checkinContro
 router.get('/checkin/:id', authenticate, canPerformOperations, commonRules.id, validate, checkinController.getById);
 
 // GET /api/operaciones/huesped/buscar - Search guest
-router.get('/huesped/buscar', authenticate, authorize('admin', 'recepcion', 'limpieza', 'mantenimiento'), checkinController.searchGuest);
+router.get('/huesped/buscar', authenticate, authorize('admin', 'recepcion', 'limpieza'), checkinController.searchGuest);
 
 // GET /api/operaciones/habitaciones-disponibles - Get available rooms
 router.get('/habitaciones-disponibles', authenticate, canPerformOperations, checkinController.getAvailableRooms);

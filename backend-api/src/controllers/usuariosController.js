@@ -6,22 +6,19 @@ const config = require('../config/env');
 const DEMO_ROLES = [
   { id: 1, nombre: 'Administrador', descripcion: 'Acceso total' },
   { id: 2, nombre: 'Recepcionista', descripcion: 'Gestión de check-in y check-out' },
-  { id: 3, nombre: 'Limpieza', descripcion: 'Gestión de limpieza' },
-  { id: 4, nombre: 'Mantenimiento', descripcion: 'Gestión de mantenimiento' }
+  { id: 3, nombre: 'Limpieza', descripcion: 'Gestión de limpieza' }
 ];
 
 const DEMO_EMPLOYEES = [
   { id: 1, codigo_empleado: 'EMP001', nombres: 'Admin', apellidos: 'Demo', email: 'admin@demo.hotel', telefono: '0000000000', rol: 'Administrador' },
   { id: 2, codigo_empleado: 'EMP002', nombres: 'Juan', apellidos: 'Pérez', email: 'recepcionista@demo.hotel', telefono: '0000000000', rol: 'Recepcionista' },
-  { id: 3, codigo_empleado: 'EMP003', nombres: 'María', apellidos: 'García', email: 'limpieza@demo.hotel', telefono: '0000000000', rol: 'Limpieza' },
-  { id: 4, codigo_empleado: 'EMP004', nombres: 'Carlos', apellidos: 'López', email: 'mantenimiento@demo.hotel', telefono: '0000000000', rol: 'Mantenimiento' }
+  { id: 3, codigo_empleado: 'EMP003', nombres: 'María', apellidos: 'García', email: 'limpieza@demo.hotel', telefono: '0000000000', rol: 'Limpieza' }
 ];
 
 const DEMO_USERS = [
   { id: 1, username: 'admin', ultimo_login: null, bloqueado: 0, activo: 1, fecha_creacion: new Date().toISOString(), empleado_id: 1, codigo_empleado: 'EMP001', rol_id: 1, rol: 'Administrador', nombre_empleado: 'Admin Demo' },
   { id: 2, username: 'recepcionista', ultimo_login: null, bloqueado: 0, activo: 1, fecha_creacion: new Date().toISOString(), empleado_id: 2, codigo_empleado: 'EMP002', rol_id: 2, rol: 'Recepcionista', nombre_empleado: 'Juan Pérez' },
-  { id: 3, username: 'limpieza', ultimo_login: null, bloqueado: 0, activo: 1, fecha_creacion: new Date().toISOString(), empleado_id: 3, codigo_empleado: 'EMP003', rol_id: 3, rol: 'Limpieza', nombre_empleado: 'María García' },
-  { id: 4, username: 'mantenimiento', ultimo_login: null, bloqueado: 0, activo: 1, fecha_creacion: new Date().toISOString(), empleado_id: 4, codigo_empleado: 'EMP004', rol_id: 4, rol: 'Mantenimiento', nombre_empleado: 'Carlos López' }
+  { id: 3, username: 'limpieza', ultimo_login: null, bloqueado: 0, activo: 1, fecha_creacion: new Date().toISOString(), empleado_id: 3, codigo_empleado: 'EMP003', rol_id: 3, rol: 'Limpieza', nombre_empleado: 'María García' }
 ];
 
 /**
@@ -377,9 +374,10 @@ const getRoles = async (req, res) => {
     }
 
     const roles = await db.query(`
-      -- FIX: Consulta adaptada a la base de datos SIGOH
+      -- FIX: Consulta adaptada a la base de datos SIGOH (excluyendo rol mantenimiento)
       SELECT id_rol, nombre, descripcion
       FROM rol
+      WHERE UPPER(nombre) NOT IN ('MANTENIMIENTO')
       ORDER BY nombre
     `);
 

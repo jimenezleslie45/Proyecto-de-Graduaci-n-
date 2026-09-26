@@ -36,7 +36,7 @@ const navigation = [
   { name: 'Habitaciones', href: '/habitaciones', icon: DoorOpen, roles: ['admin', 'recepcion'] },
 
   // 5) Monitor de Estados - Todos los roles
-  { name: 'Monitor', href: '/monitor', icon: Monitor, roles: ['recepcion', 'limpieza', 'mantenimiento', 'admin'] },
+  { name: 'Monitor', href: '/monitor', icon: Monitor, roles: ['recepcion', 'limpieza', 'admin'] },
 
 // 6) Gestión de Tareas de Limpieza - Admin, Recepción, Limpieza
   { name: 'Gestión de Tareas de Limpieza', href: '/limpieza', icon: Sparkles, roles: ['limpieza', 'recepcion', 'admin'] },
@@ -44,11 +44,11 @@ const navigation = [
   // 7) Ejecución de Limpieza - Admin, Limpieza
   { name: 'Ejecución Limpieza', href: '/limpieza/ejecutar', icon: Play, roles: ['limpieza', 'admin'] },
 
-  // 8) Reporte de Mantenimiento - Admin, Mantenimiento
-  { name: 'Reporte Mantenimiento', href: '/mantenimiento', icon: Wrench, roles: ['mantenimiento', 'admin'] },
+  // 8) Reporte de Mantenimiento - Admin
+  { name: 'Reporte Mantenimiento', href: '/mantenimiento', icon: Wrench, roles: ['admin'] },
 
-  // 9) Ejecución de Mantenimiento - Admin, Mantenimiento
-  { name: 'Ejecución Mantenimiento', href: '/mantenimiento/ejecutar', icon: Play, roles: ['mantenimiento', 'admin'] },
+  // 9) Ejecución de Mantenimiento - Admin
+  { name: 'Ejecución Mantenimiento', href: '/mantenimiento/ejecutar', icon: Play, roles: ['admin'] },
 
 // 10) Reportes y KPIs - Solo Admin
   { name: 'Reportes Automatizados y KPIs', href: '/reportes', icon: FileBarChart, roles: ['admin'] },

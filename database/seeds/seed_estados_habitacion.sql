@@ -25,8 +25,7 @@ INSERT INTO TipoHabitacion (nombre, descripcion, capacidad, precio_base, activo)
 INSERT INTO Rol (nombre, descripcion, activo) VALUES
 ('Administrador', 'Acceso total al sistema', 1),
 ('Recepcionista', 'Gestión de check-in/check-out', 1),
-('Limpieza', 'Gestión de tareas de limpieza', 1),
-('Mantenimiento', 'Gestión de mantenimiento', 1);
+('Limpieza', 'Gestión de tareas de limpieza', 1);
 
 -- =====================================================
 -- SEED: Turnos

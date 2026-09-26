@@ -364,7 +364,7 @@ const convertir = async (req, res) => {
       recepcionista_id: recepcionistaId,
       estado: 'ACTIVA'
     });
-    const idEstadia = estadiaResult && estadiaResult.id;
+    const idEstadia = estadiaResult?.id_estadia || estadiaResult?.id || (Array.isArray(estadiaResult) ? estadiaResult[0]?.id_estadia : null);
 
     await db.query(`
       UPDATE dbo.reserva
