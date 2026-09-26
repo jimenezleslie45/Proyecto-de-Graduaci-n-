@@ -30,7 +30,9 @@ const getTableColumns = async (tableName) => {
 };
 
 /**
- * Create a new guest (person + huesped)
+ * Create a new guest (person + huesped).
+ * Lógica upsert: si la persona ya existe por documento, se reutiliza.
+ * Si ya es huésped, se devuelve el registro existente sin error.
  */
 const create = async (req, res) => {
   try {
@@ -58,148 +60,91 @@ const create = async (req, res) => {
       return res.status(201).json({ success: true, data: newHuesped, message: 'Huésped creado exitosamente' });
     }
 
-    // -------------------------------------------------------
-    // 1. Leer columnas reales de dbo.persona
-    // -------------------------------------------------------
-    const personaCols = await getTableColumns('persona');
-    logger.info(`[huesped.create] Columnas de persona: ${personaCols.join(', ')}`);
-
-    // Construir INSERT dinámico para dbo.persona
-    const personaInsertCols = [];
-    const personaInsertVals = [];
-    const personaParams = {};
-
-    // nombres / primer_nombre
-    if (personaCols.includes('nombres')) {
-      personaInsertCols.push('nombres'); personaInsertVals.push('@nombres');
-      personaParams.nombres = nombres;
-    } else if (personaCols.includes('primer_nombre')) {
-      personaInsertCols.push('primer_nombre'); personaInsertVals.push('@nombres');
-      personaParams.nombres = nombres;
-    }
-
-    // apellidos / primer_apellido
-    if (personaCols.includes('apellidos')) {
-      personaInsertCols.push('apellidos'); personaInsertVals.push('@apellidos');
-      personaParams.apellidos = apellidos;
-    } else if (personaCols.includes('primer_apellido')) {
-      personaInsertCols.push('primer_apellido'); personaInsertVals.push('@apellidos');
-      personaParams.apellidos = apellidos;
-    }
-
-    // documento (columna única que combina tipo + número)
-    if (personaCols.includes('documento')) {
-      personaInsertCols.push('documento'); personaInsertVals.push('@documento');
-      personaParams.documento = `${tipo_documento || 'CI'} ${numero_documento}`;
-    }
-
-    // numero_documento / nro_documento por separado
-    if (personaCols.includes('numero_documento')) {
-      personaInsertCols.push('numero_documento'); personaInsertVals.push('@numero_documento');
-      personaParams.numero_documento = numero_documento;
-    }
-    if (personaCols.includes('tipo_documento')) {
-      personaInsertCols.push('tipo_documento'); personaInsertVals.push('@tipo_documento');
-      personaParams.tipo_documento = tipo_documento || 'CI';
-    }
-
-    // email / correo
-    if (personaCols.includes('email')) {
-      personaInsertCols.push('email'); personaInsertVals.push('@email');
-      personaParams.email = email || '';
-    } else if (personaCols.includes('correo')) {
-      personaInsertCols.push('correo'); personaInsertVals.push('@email');
-      personaParams.email = email || '';
-    }
-
-    // telefono (si está en persona directamente)
-    if (personaCols.includes('telefono') && telefono) {
-      personaInsertCols.push('telefono'); personaInsertVals.push('@telefono_p');
-      personaParams.telefono_p = telefono;
-    }
-
-    if (personaInsertCols.length === 0) {
-      throw new Error('No se pudo determinar la estructura de la tabla persona');
-    }
-
-    const personaSQL = `
-      INSERT INTO dbo.persona (${personaInsertCols.join(', ')})
-      VALUES (${personaInsertVals.join(', ')});
-      SELECT SCOPE_IDENTITY() as id_persona;
-    `;
-    logger.info(`[huesped.create] SQL persona: ${personaSQL}`);
-
-    const personaResult = await db.query(personaSQL, personaParams);
-    const idPersona = personaResult && personaResult[0] ? personaResult[0].id_persona : null;
-
-    if (!idPersona) {
-      throw new Error('No se pudo obtener el ID de la persona insertada');
-    }
+    // El documento se guarda como "TIPO NUMERO" en la columna única (ej: "CI 78658823")
+    const documentoCompleto = `${tipo_documento || 'CI'} ${numero_documento}`;
 
     // -------------------------------------------------------
-    // 2. Insertar teléfono en persona_telefono (si existe la tabla)
+    // 1. Buscar si ya existe una persona con ese documento
     // -------------------------------------------------------
-    if (telefono) {
-      try {
-        const telCols = await getTableColumns('persona_telefono');
-        if (telCols.includes('id_persona') && telCols.includes('telefono')) {
-          const telInsertCols = ['id_persona', 'telefono'];
-          const telInsertVals = ['@id_persona_tel', '@telefono'];
-          const telParams = { id_persona_tel: idPersona, telefono };
+    const existePersonaResult = await db.query(`
+      SELECT id_persona FROM dbo.persona WHERE documento = @documento
+    `, { documento: documentoCompleto });
 
-          if (telCols.includes('tipo')) { telInsertCols.push('tipo'); telInsertVals.push('@tipo'); telParams.tipo = 'celular'; }
-          if (telCols.includes('principal')) { telInsertCols.push('principal'); telInsertVals.push('@principal'); telParams.principal = 1; }
+    let idPersona = null;
 
-          await db.query(`
-            INSERT INTO dbo.persona_telefono (${telInsertCols.join(', ')})
-            VALUES (${telInsertVals.join(', ')});
-          `, telParams);
+    if (existePersonaResult && existePersonaResult[0]) {
+      // La persona ya existe — reutilizar su id
+      idPersona = existePersonaResult[0].id_persona;
+      logger.info(`[huesped.create] Persona ya existe con id_persona=${idPersona}, reutilizando.`);
+    } else {
+      // La persona NO existe — crearla
+      const personaSQL = `
+        INSERT INTO dbo.persona (nombres, apellidos, documento, email)
+        VALUES (@nombres, @apellidos, @documento, @email);
+        SELECT SCOPE_IDENTITY() as id_persona;
+      `;
+      logger.info(`[huesped.create] Creando nueva persona con documento: ${documentoCompleto}`);
+      const personaResult = await db.query(personaSQL, {
+        nombres,
+        apellidos,
+        documento: documentoCompleto,
+        email: email || null
+      });
+      idPersona = personaResult && personaResult[0] ? personaResult[0].id_persona : null;
+
+      if (!idPersona) {
+        throw new Error('No se pudo obtener el ID de la persona insertada');
+      }
+
+      // Insertar teléfono en persona_telefono si existe la tabla
+      if (telefono) {
+        try {
+          const telCols = await getTableColumns('persona_telefono');
+          if (telCols.includes('id_persona') && telCols.includes('telefono')) {
+            const telInsertCols = ['id_persona', 'telefono'];
+            const telInsertVals = ['@id_persona_tel', '@telefono'];
+            const telParams = { id_persona_tel: idPersona, telefono };
+
+            if (telCols.includes('tipo')) { telInsertCols.push('tipo'); telInsertVals.push('@tipo'); telParams.tipo = 'celular'; }
+            if (telCols.includes('principal')) { telInsertCols.push('principal'); telInsertVals.push('@principal'); telParams.principal = 1; }
+
+            await db.query(`
+              INSERT INTO dbo.persona_telefono (${telInsertCols.join(', ')})
+              VALUES (${telInsertVals.join(', ')});
+            `, telParams);
+          }
+        } catch (telError) {
+          logger.warn(`[huesped.create] No se pudo insertar teléfono: ${telError.message}`);
         }
-      } catch (telError) {
-        // No es fatal si el teléfono falla
-        logger.warn(`[huesped.create] No se pudo insertar teléfono: ${telError.message}`);
       }
     }
 
     // -------------------------------------------------------
-    // 3. Insertar en dbo.huesped
+    // 2. Verificar si ya existe un huesped para esa persona
     // -------------------------------------------------------
-    const huespedCols = await getTableColumns('huesped');
-    logger.info(`[huesped.create] Columnas de huesped: ${huespedCols.join(', ')}`);
+    const existeHuespedResult = await db.query(`
+      SELECT id_huesped FROM dbo.huesped WHERE id_persona = @id_persona
+    `, { id_persona: idPersona });
 
-    const huespedInsertCols = [];
-    const huespedInsertVals = [];
-    const huespedParams = {};
+    let idHuesped = null;
 
-    if (huespedCols.includes('id_persona')) {
-      huespedInsertCols.push('id_persona'); huespedInsertVals.push('@id_persona_h');
-      huespedParams.id_persona_h = idPersona;
-    }
-    if (huespedCols.includes('notas')) {
-      huespedInsertCols.push('notas'); huespedInsertVals.push('@notas');
-      huespedParams.notas = '';
-    }
-    if (huespedCols.includes('observaciones')) {
-      huespedInsertCols.push('observaciones'); huespedInsertVals.push('@observaciones_h');
-      huespedParams.observaciones_h = '';
-    }
+    if (existeHuespedResult && existeHuespedResult[0]) {
+      // Ya es huésped — devolver el existente sin error
+      idHuesped = existeHuespedResult[0].id_huesped;
+      logger.info(`[huesped.create] Huésped ya existe con id_huesped=${idHuesped}, reutilizando.`);
+    } else {
+      // Crear nuevo registro de huésped
+      const huespedSQL = `
+        INSERT INTO dbo.huesped (id_persona)
+        VALUES (@id_persona_h);
+        SELECT SCOPE_IDENTITY() as id_huesped;
+      `;
+      const huespedResult = await db.query(huespedSQL, { id_persona_h: idPersona });
+      idHuesped = huespedResult && huespedResult[0] ? huespedResult[0].id_huesped : null;
 
-    if (huespedInsertCols.length === 0) {
-      throw new Error('No se pudo determinar la estructura de la tabla huesped');
-    }
-
-    const huespedSQL = `
-      INSERT INTO dbo.huesped (${huespedInsertCols.join(', ')})
-      VALUES (${huespedInsertVals.join(', ')});
-      SELECT SCOPE_IDENTITY() as id_huesped;
-    `;
-    logger.info(`[huesped.create] SQL huesped: ${huespedSQL}`);
-
-    const huespedResult = await db.query(huespedSQL, huespedParams);
-    const idHuesped = huespedResult && huespedResult[0] ? huespedResult[0].id_huesped : null;
-
-    if (!idHuesped) {
-      throw new Error('No se pudo obtener el ID del huésped insertado');
+      if (!idHuesped) {
+        throw new Error('No se pudo obtener el ID del huésped insertado');
+      }
     }
 
     const numeroHuesped = `H${String(idHuesped).padStart(3, '0')}`;

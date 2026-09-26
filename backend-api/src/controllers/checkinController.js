@@ -53,12 +53,11 @@ const createEstadiaRecord = async ({
 }) => {
   const columns = await getActualColumns('estadia');
 
-  // Fallback: si no se pudieron leer las columnas, usar la estructura conocida de la tabla estadia
+  // Fallback: columnas reales de dbo.estadia (confirmadas por diagnóstico)
   const effectiveColumns = columns.length > 0
     ? columns
-    : ['id_habitacion', 'id_huesped', 'check_in', 'check_out', 'cantidad_personas',
-       'total_cargo', 'metodo_pago', 'observaciones', 'estado', 'numero_estadia',
-       'biometria_verificada', 'tipo_verificacion', 'id_empleado_checkin', 'fecha_creacion'];
+    : ['id_habitacion', 'id_huesped', 'recepcionista_id', 'check_in', 'check_out',
+       'cantidad_personas', 'total_cargo', 'metodo_pago', 'estado'];
 
   let checkinDateTime = new Date();
   if (fecha_checkin) {
@@ -106,9 +105,15 @@ const createEstadiaRecord = async ({
     insertColumns.push('id_huesped');
     insertValues.push('@id_huesped');
   }
-  // NOTA: Se omite recepcionista_id/id_empleado_checkin intencionalmente.
-  // Si se incluye, puede causar violación de FK cuando el id del usuario
-  // no existe en la tabla de empleados. La columna debe ser nullable en la BD.
+  // recepcionista_id apunta a usuario.id_usuario (NO a empleado),
+  // por lo que se puede pasar directamente req.user.id.
+  const recepcionistaColumns = ['recepcionista_id', 'id_empleado_checkin', 'id_recepcionista'];
+  const recepcionistaColumn = effectiveColumns.find(c => recepcionistaColumns.includes(c));
+  if (recepcionistaColumn && recepcionista_id) {
+    insertColumns.push(recepcionistaColumn);
+    insertValues.push('@recepcionista_id');
+    params.recepcionista_id = Number(recepcionista_id);
+  }
   if (effectiveColumns.includes('numero_estadia')) {
     insertColumns.push('numero_estadia');
     insertValues.push('@numero_estadia');
@@ -370,7 +375,7 @@ const getAvailableRooms = async (req, res) => {
         INNER JOIN tipo_habitacion th ON h.id_tipo = th.id_tipo
         INNER JOIN estado_habitacion eh ON h.id_estado_actual = eh.id_estado
         WHERE eh.permite_checkin = 1 AND ISNULL(h.activo, 1) = 1
-        ORDER BY h.piso, h.numero
+        ORDER BY th.id_tipo, h.piso, h.numero
       `;
       result = await db.query(query);
     } catch (queryErr) {
@@ -381,7 +386,7 @@ const getAvailableRooms = async (req, res) => {
           INNER JOIN tipo_habitacion th ON h.id_tipo = th.id_tipo
           INNER JOIN estado_habitacion eh ON h.id_estado_actual = eh.id_estado
           WHERE eh.permite_checkin = 1
-          ORDER BY h.piso, h.numero
+          ORDER BY th.id_tipo, h.piso, h.numero
         `;
         result = await db.query(fallbackQuery);
       } else {
@@ -400,8 +405,17 @@ const getAvailableRooms = async (req, res) => {
  */
 const create = async (req, res) => {
   try {
+    // 1. Verificar que id_habitacion provenga correctamente del req.body
+    const id_habitacion = req.body.id_habitacion || req.body.habitacion_id;
+
+    if (!id_habitacion) {
+      return res.status(400).json({
+        success: false,
+        message: 'Debe seleccionar una habitación válida para realizar el check-in.'
+      });
+    }
+
     const {
-      id_habitacion,
       id_huesped,
       fecha_checkin,
       hora_checkin,

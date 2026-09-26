@@ -34,21 +34,22 @@ const Login = () => {
   ]
 
   const getHomeRoute = (rol) => {
-    const rolNormalizado = rol == null ? null : String(rol).trim()
-    if (rolNormalizado === 'Limpieza') return '/limpieza'
+    const rolNormalizado = rol == null ? '' : String(rol).trim().toLowerCase()
+    if (rolNormalizado === 'limpieza') return '/limpieza'
     return '/panel'
   }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     limpiarError()
-    const success = await iniciarSesion(usuario, contrasena)
-    if (success) {
+    const rolResult = await iniciarSesion(usuario, contrasena)
+    if (rolResult) {
       toast.success('Inicio de sesión exitoso')
-      const destino = getHomeRoute(usuarioActual?.rol)
+      const destino = getHomeRoute(rolResult)
       navigate(destino, { replace: true })
     } else {
-      toast.error(error || 'No se pudo iniciar sesión')
+      const errorMsg = useAuthStore.getState().error || 'No se pudo iniciar sesión'
+      toast.error(errorMsg)
     }
   }
 
