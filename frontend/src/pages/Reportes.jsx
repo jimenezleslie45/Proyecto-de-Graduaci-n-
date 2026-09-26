@@ -44,6 +44,10 @@ const Reportes = () => {
   const [historialFacturas, setHistorialFacturas] = useState([])
   const [loadingFacturas, setLoadingFacturas] = useState(false)
 
+  const [historialReportes, setHistorialReportes] = useState([])
+  const [loadingReportes, setLoadingReportes] = useState(false)
+  const [generandoReporte, setGenerandoReporte] = useState(false)
+
   // Configuración de reportes programados
   const [config, setConfig] = useState({
     frecuencia: 'diario',
@@ -97,6 +101,43 @@ const Reportes = () => {
   useEffect(() => {
     fetchFacturas()
   }, [fetchFacturas])
+
+  const fetchHistorialReportes = useCallback(async () => {
+    setLoadingReportes(true)
+    try {
+      const response = await api.get('/reportes/historial')
+      setHistorialReportes(response.data.data || response.data || [])
+    } catch (error) {
+      console.error('Error al cargar historial de reportes:', error)
+      setHistorialReportes([])
+    } finally {
+      setLoadingReportes(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchHistorialReportes()
+  }, [fetchHistorialReportes])
+
+  const descargarReporte = async (reporte) => {
+    try {
+      const response = await api.get(`/reportes/${reporte.id_reporte}/descargar`, { responseType: 'blob' })
+      const ext = (reporte.formato || '').toLowerCase() === 'excel' ? 'xlsx' : 'pdf'
+      const filename = reporte.ruta_archivo ? reporte.ruta_archivo.split(/[/\\]/).pop() : `reporte_${reporte.id_reporte}.${ext}`
+      const url = window.URL.createObjectURL(new Blob([response.data]))
+      const link = document.createElement('a')
+      link.href = url
+      link.setAttribute('download', filename)
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+      toast.success('Reporte descargado correctamente')
+    } catch (error) {
+      console.error('Error al descargar reporte:', error)
+      toast.error(error.response?.data?.message || 'Error al descargar el reporte')
+    }
+  }
 
   const descargarPDF = async (idFactura) => {
     try {
@@ -157,62 +198,46 @@ const Reportes = () => {
     }
   }
 
+  const generarReporteManual = async () => {
+    setGenerandoReporte(true)
+    try {
+      await api.post('/reportes/generar', {
+        tipo: config.frecuencia.toUpperCase(),
+        formato: config.formato.toUpperCase()
+      })
+      toast.success('Reporte generado exitosamente')
+      fetchHistorialReportes()
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Error al generar reporte')
+    } finally {
+      setGenerandoReporte(false)
+    }
+  }
+
   // ====== DATOS DERIVADOS ======
-  const totalHabitaciones = kpis?.habitaciones_totales || 20
-  const disponibles = kpis?.habitaciones_disponibles || 12
+  const totalHabitaciones = kpis?.habitaciones_totales || 0
+  const disponibles = kpis?.habitaciones_disponibles || 0
   const tasaOcupacion = kpis?.porcentaje_ocupacion ?? (kpis?.ocupacion?.tasa_ocupacion || 0)
-  const tiempoLimpieza = kpis?.tiempo_promedio_limpieza ?? kpis?.limpieza?.tiempo_promedio_minutos ?? 28
-  const tiempoReparacion = kpis?.tiempo_promedio_mantenimiento ?? kpis?.mantenimiento?.tiempo_promedio ?? 55
+  const tiempoLimpieza = kpis?.tiempo_promedio_limpieza ?? 0
+  const tiempoReparacion = kpis?.tiempo_promedio_mantenimiento ?? 0
 
   // Ocupación últimos 7 días (bar chart)
-  const ocupacion7Dias = [
-    { name: 'Lun', ocupacion: 22 },
-    { name: 'Mar', ocupacion: 25 },
-    { name: 'Mié', ocupacion: 30 },
-    { name: 'Jue', ocupacion: 28 },
-    { name: 'Vie', ocupacion: 35 },
-    { name: 'Sáb', ocupacion: 42 },
-    { name: 'Dom', ocupacion: 38 }
-  ]
+  const ocupacion7Dias = kpis?.ocupacion_7_dias || []
 
   // Eficiencia por empleado (horizontal bar)
-  const eficienciaEmpleados = [
-    { name: 'Empleado 1', eficiencia: 92 },
-    { name: 'Empleado 2', eficiencia: 88 },
-    { name: 'Empleado 3', eficiencia: 84 },
-    { name: 'Empleado 4', eficiencia: 79 },
-    { name: 'Empleado 5', eficiencia: 75 }
-  ]
+  const eficienciaEmpleados = kpis?.eficiencia_empleados || []
 
   // Categorías de mantenimiento más frecuentes (pie chart)
-  const categoriasMantenimiento = [
-    { name: 'Eléctrica', value: 5 },
-    { name: 'Plomería', value: 4 },
-    { name: 'A/A', value: 3 },
-    { name: 'Mobiliario', value: 3 }
-  ]
+  const categoriasMantenimiento = kpis?.categorias_mantenimiento || []
 
   // Top empleados por productividad
-  const topEmpleados = [
-    { nombre: '', tareas: 20, tiempo_promedio: 26, eficiencia: 92 },
-    { nombre: '', tareas: 18, tiempo_promedio: 30, eficiencia: 88 },
-    { nombre: '', tareas: 15, tiempo_promedio: 33, eficiencia: 84 },
-    { nombre: '', tareas: 12, tiempo_promedio: 38, eficiencia: 79 },
-    { nombre: '', tareas: 10, tiempo_promedio: 41, eficiencia: 75 }
-  ]
+  const topEmpleados = kpis?.top_empleados || []
 
   // Alertas activas (tiempos excedidos)
-  const alertasActivas = [
-    { tipo: 'Limpieza', habitacion: '104', tiempo: 45, estandar: 30 },
-    { tipo: 'Mantenimiento', habitacion: '203', tiempo: 95, estandar: 60 },
-    { tipo: 'Limpieza', habitacion: '107', tiempo: 38, estandar: 30 }
-  ]
+  const alertasActivas = kpis?.alertas || []
 
   // Habitaciones fuera de servicio
-  const fueraServicio = [
-    { numero: '203', motivo: 'Mantenimiento', tiempo: '2 días' },
-    { numero: '305', motivo: 'Reparación eléctrica', tiempo: '1 día' }
-  ]
+  const fueraServicio = kpis?.habitaciones_fuera_servicio || []
 
   if (loading) {
     return (
@@ -460,17 +485,23 @@ const Reportes = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {topEmpleados.map((e, i) => (
-                        <tr key={i} className="border-t border-gray-100">
-                          <td className="py-2 font-medium">{e.nombre}</td>
-                          <td className="py-2">{e.tareas}</td>
-                          <td className="py-2">
-                            <span className="inline-flex items-center gap-1 text-green-600">
-                              <Zap className="h-3 w-3" />{e.eficiencia}%
-                            </span>
-                          </td>
+                      {topEmpleados.length === 0 ? (
+                        <tr>
+                          <td colSpan={3} className="py-4 text-center text-xs text-gray-400">Sin registros de productividad</td>
                         </tr>
-                      ))}
+                      ) : (
+                        topEmpleados.map((e, i) => (
+                          <tr key={i} className="border-t border-gray-100">
+                            <td className="py-2 font-medium">{e.nombre}</td>
+                            <td className="py-2">{e.tareas}</td>
+                            <td className="py-2">
+                              <span className="inline-flex items-center gap-1 text-green-600">
+                                <Zap className="h-3 w-3" />{e.eficiencia}%
+                              </span>
+                            </td>
+                          </tr>
+                        ))
+                      )}
                     </tbody>
                   </table>
                 </div>
@@ -492,22 +523,28 @@ const Reportes = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {alertasActivas.map((a, i) => (
-                        <tr key={i} className="border-t border-gray-100">
-                          <td className="py-2">
-                            <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${
-                              a.tipo === 'Limpieza' ? 'bg-yellow-100 text-yellow-700' : 'bg-orange-100 text-orange-700'
-                            }`}>
-                              {a.tipo === 'Limpieza' ? <Sparkles className="h-3 w-3" /> : <Wrench className="h-3 w-3" />}
-                              {a.tipo}
-                            </span>
-                          </td>
-                          <td className="py-2 font-medium">{a.habitacion}</td>
-                          <td className="py-2 text-red-600">
-                            {a.tiempo}/{a.estandar} min
-                          </td>
+                      {alertasActivas.length === 0 ? (
+                        <tr>
+                          <td colSpan={3} className="py-4 text-center text-xs text-gray-400">Sin alertas activas</td>
                         </tr>
-                      ))}
+                      ) : (
+                        alertasActivas.map((a, i) => (
+                          <tr key={i} className="border-t border-gray-100">
+                            <td className="py-2">
+                              <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${
+                                a.tipo === 'Limpieza' ? 'bg-yellow-100 text-yellow-700' : 'bg-orange-100 text-orange-700'
+                              }`}>
+                                {a.tipo === 'Limpieza' ? <Sparkles className="h-3 w-3" /> : <Wrench className="h-3 w-3" />}
+                                {a.tipo}
+                              </span>
+                            </td>
+                            <td className="py-2 font-medium">{a.habitacion}</td>
+                            <td className="py-2 text-red-600">
+                              {a.tiempo}/{a.estandar} min
+                            </td>
+                          </tr>
+                        ))
+                      )}
                     </tbody>
                   </table>
                 </div>
@@ -529,13 +566,19 @@ const Reportes = () => {
                       </tr>
                     </thead>
                     <tbody>
-{fueraServicio.map((h, i) => (
-                        <tr key={i} className="border-t border-gray-100">
-                          <td className="py-2 font-medium">{h.numero}</td>
-                          <td className="py-2">{h.motivo}</td>
-                          <td className="py-2 text-orange-600">{h.tiempo}</td>
+                      {fueraServicio.length === 0 ? (
+                        <tr>
+                          <td colSpan={3} className="py-4 text-center text-xs text-gray-400">Sin habitaciones fuera de servicio</td>
                         </tr>
-                      ))}
+                      ) : (
+                        fueraServicio.map((h, i) => (
+                          <tr key={i} className="border-t border-gray-100">
+                            <td className="py-2 font-medium">{h.numero}</td>
+                            <td className="py-2">{h.motivo}</td>
+                            <td className="py-2 text-orange-600">{h.tiempo}</td>
+                          </tr>
+                        ))
+                      )}
                     </tbody>
                   </table>
                 </div>
@@ -671,11 +714,103 @@ const Reportes = () => {
                 <Save className="h-4 w-4" /> Guardar programación
               </button>
 
+              <button
+                onClick={generarReporteManual}
+                disabled={generandoReporte}
+                className="btn btn-secondary w-full inline-flex items-center justify-center gap-2"
+              >
+                <Zap className="h-4 w-4" /> {generandoReporte ? 'Generando...' : 'Generar reporte ahora'}
+              </button>
+
               <div className="rounded-xl bg-gray-50 p-3 text-xs text-gray-500">
                 <Clock className="h-3 w-3 inline mr-1" />
                 Los KPIs se actualizan automáticamente cada 5 minutos.
               </div>
             </div>
+          </div>
+
+          {/* ===== SECCIÓN: REPORTES GENERADOS ===== */}
+          <div className="card">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <FileBarChart className="h-5 w-5 text-primary-600" />
+                <h3 className="text-md font-semibold text-slate-900">Reportes Generados</h3>
+              </div>
+              <button
+                onClick={fetchHistorialReportes}
+                disabled={loadingReportes}
+                className="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-primary-600 transition"
+                title="Actualizar historial"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${loadingReportes ? 'animate-spin' : ''}`} />
+              </button>
+            </div>
+
+            {loadingReportes ? (
+              <div className="py-8 text-center text-gray-400">
+                <div className="inline-flex items-center gap-2 text-xs">
+                  <div className="w-4 h-4 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+                  Cargando reportes...
+                </div>
+              </div>
+            ) : historialReportes.length === 0 ? (
+              <div className="py-8 text-center">
+                <FileBarChart className="h-8 w-8 mx-auto mb-2 text-gray-300" />
+                <p className="text-sm font-medium text-gray-500">Aún no se han generado reportes</p>
+                <p className="text-xs text-gray-400 mt-1">Los reportes automáticos o manuales aparecerán aquí para su descarga.</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200 text-xs">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-2.5 py-2 text-left font-semibold text-gray-600 uppercase tracking-wider">Tipo</th>
+                      <th className="px-2.5 py-2 text-left font-semibold text-gray-600 uppercase tracking-wider">Fecha</th>
+                      <th className="px-2.5 py-2 text-left font-semibold text-gray-600 uppercase tracking-wider">Formato</th>
+                      <th className="px-2.5 py-2 text-right font-semibold text-gray-600 uppercase tracking-wider">Acción</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-100">
+                    {historialReportes.map((rep) => (
+                      <tr key={rep.id_reporte} className="hover:bg-gray-50 transition-colors">
+                        <td className="px-2.5 py-2.5 whitespace-nowrap font-medium">
+                          <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                            rep.tipo === 'DIARIO'
+                              ? 'bg-blue-100 text-blue-800'
+                              : rep.tipo === 'SEMANAL'
+                              ? 'bg-purple-100 text-purple-800'
+                              : 'bg-emerald-100 text-emerald-800'
+                          }`}>
+                            {rep.tipo}
+                          </span>
+                        </td>
+                        <td className="px-2.5 py-2.5 whitespace-nowrap text-gray-700">
+                          {rep.fecha_reporte ? new Date(rep.fecha_reporte).toLocaleDateString() : '-'}
+                        </td>
+                        <td className="px-2.5 py-2.5 whitespace-nowrap">
+                          <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                            rep.formato === 'PDF' ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'
+                          }`}>
+                            {rep.formato}
+                          </span>
+                        </td>
+                        <td className="px-2.5 py-2.5 whitespace-nowrap text-right">
+                          <button
+                            type="button"
+                            onClick={() => descargarReporte(rep)}
+                            className="inline-flex items-center gap-1 rounded bg-gray-100 hover:bg-primary-100 hover:text-primary-700 px-2 py-1 text-xs font-medium transition-colors"
+                            title="Descargar archivo real"
+                          >
+                            <Download className="h-3 w-3" />
+                            Descargar
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </aside>
 

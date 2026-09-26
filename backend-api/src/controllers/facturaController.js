@@ -142,7 +142,7 @@ const generarFacturaPDFBuffer = async (idFactura) => {
     doc.on('error', reject);
 
     // Cabecera
-    doc.fontSize(20).font('Helvetica-Bold').text('Hotel Los Arcos', { align: 'center' });
+    doc.fontSize(20).font('Helvetica-Bold').text('Sistema de Gestión Hotelera', { align: 'center' });
     doc.fontSize(10).font('Helvetica').text('Factura N°: ' + factura.id_factura, { align: 'right' });
     doc.moveDown();
 
@@ -214,7 +214,7 @@ const descargarFacturaPDF = async (req, res) => {
 
     // --- Diseño del PDF ---
     // Cabecera
-    doc.fontSize(20).font('Helvetica-Bold').text('Hotel Los Arcos', { align: 'center' });
+    doc.fontSize(20).font('Helvetica-Bold').text('Sistema de Gestión Hotelera', { align: 'center' });
     doc.fontSize(10).font('Helvetica').text('Factura N°: ' + factura.id_factura, { align: 'right' });
     doc.moveDown();
 

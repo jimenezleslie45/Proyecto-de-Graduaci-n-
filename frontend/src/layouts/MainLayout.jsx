@@ -201,8 +201,8 @@ const SidebarContent = ({ navigation }) => (
         </div>
 
         <div className="text-white">
-          <div className="text-lg font-bold leading-tight text-white">HOTEL LOS ARCOS</div>
-          <div className="text-xs text-blue-100 mt-1">Sistema Administrativo</div>
+          <div className="text-sm font-bold leading-tight text-white">SISTEMA HOTELERO</div>
+          <div className="text-xs text-blue-100 mt-1">Gestión Hotelera</div>
         </div>
       </div>
     </div>

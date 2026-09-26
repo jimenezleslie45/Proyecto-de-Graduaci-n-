@@ -43,11 +43,11 @@ const enviarFacturaPorCorreo = async (to, factura, pdfBuffer) => {
   const mailOptions = {
     from: config.email.from,
     to,
-    subject: `Factura #${factura.id_factura} - Hotel Los Arcos`,
+    subject: `Factura #${factura.id_factura} - Sistema de Gestión Hotelera`,
     html: `
       <div style="font-family:Arial,Helvetica,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;">
         <div style="background:#0a1628;color:#f5c542;padding:24px;text-align:center;">
-          <h1 style="margin:0;letter-spacing:2px;">Hotel Los Arcos</h1>
+          <h1 style="margin:0;letter-spacing:1px;font-size:22px;">Sistema de Gestión Hotelera</h1>
           <p style="margin:4px 0 0;color:#e2e8f0;font-size:13px;">Gestión Profesional de Alojamiento</p>
         </div>
         <div style="padding:24px;color:#1f2937;">
@@ -59,7 +59,7 @@ const enviarFacturaPorCorreo = async (to, factura, pdfBuffer) => {
           <p style="font-size:13px;color:#6b7280;">Adjuntamos su factura en formato PDF. Gracias por preferirnos.</p>
         </div>
         <div style="background:#f8fafc;padding:12px;text-align:center;font-size:12px;color:#94a3b8;">
-          Hotel Los Arcos · Sistema de Gestión Hotelera
+          Sistema de Gestión Hotelera
         </div>
       </div>
     `,

@@ -26,9 +26,9 @@ const CheckIn = () => {
     fecha_entrada: getFechaHoy(),
     hora_entrada: getHoraActual(),
     fecha_salida_estimada: '',
-    hora_salida_estimada: '12:00',
+    hora_salida_estimada: '',
     email: '',
-    tipo_documento: 'CI'
+    tipo_documento: 'DPI'
   })
 
   // Biometric states
@@ -141,7 +141,7 @@ const CheckIn = () => {
       const guestResponse = await api.post('/operaciones/huesped', {
         nombres: formData.nombre.trim(),
         apellidos: formData.apellido.trim(),
-        tipo_documento: formData.tipo_documento || 'CI',
+        tipo_documento: formData.tipo_documento || 'DPI',
         numero_documento: formData.numero_documento.trim(),
         telefono: formData.telefono ? formData.telefono.trim() : '',
         email: formData.email ? formData.email.trim() : ''
@@ -178,9 +178,9 @@ const CheckIn = () => {
         fecha_entrada: getFechaHoy(),
         hora_entrada: getHoraActual(),
         fecha_salida_estimada: '',
-        hora_salida_estimada: '12:00',
+        hora_salida_estimada: '',
         email: '',
-        tipo_documento: 'CI'
+        tipo_documento: 'DPI'
       })
       setCapturedPhoto(null)
       await fetchHabitacionesDisponibles()

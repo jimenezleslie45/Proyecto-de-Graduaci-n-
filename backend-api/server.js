@@ -18,6 +18,7 @@ const reportesRoutes = require('./src/routes/reportes.routes');
 const usuariosRoutes = require('./src/routes/usuarios.routes');
 const facturaRoutes = require('./src/routes/factura.routes');
 const reservaRoutes = require('./src/routes/reserva.routes');
+const { iniciarCronJobs } = require('./src/jobs/reportesCron');
 
 // Initialize Express app
 const app = express();
@@ -88,6 +89,9 @@ const startServer = async () => {
       logger.info(`Server running on port ${config.port}`);
       logger.info(`Environment: ${config.nodeEnv}`);
       logger.info('API ready at http://localhost:' + config.port);
+
+      // Iniciar tareas automáticas de reportes
+      iniciarCronJobs();
     });
   } catch (error) {
     logger.error('Failed to start server:', { error: error.message, stack: error.stack });

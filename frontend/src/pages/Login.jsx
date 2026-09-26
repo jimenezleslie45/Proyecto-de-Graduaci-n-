@@ -97,7 +97,7 @@ const Login = () => {
                 <Shield className="h-8 w-8 text-yellow-200/80" />
               </div>
               <p className="text-[11px] uppercase tracking-[0.25em] text-yellow-200/60 font-semibold mb-1">
-                Hotel Los Arcos
+                Sistema de Gestión Hotelera
               </p>
               <h1 className="text-3xl font-bold text-yellow-200/90 mb-1 tracking-wide">
                 Iniciar Sesión

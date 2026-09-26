@@ -16,4 +16,10 @@ router.post('/generar', authenticate, canManageReports, reportesController.gener
 // POST /api/reportes/exportar - Export report
 router.post('/exportar', authenticate, canManageReports, reportesController.exportReport);
 
+// GET /api/reportes/historial - Get generated reports history
+router.get('/historial', authenticate, canManageReports, reportesController.getHistorialReportes);
+
+// GET /api/reportes/:id/descargar - Download generated report file
+router.get('/:id/descargar', authenticate, canManageReports, reportesController.descargarReporte);
+
 module.exports = router;
