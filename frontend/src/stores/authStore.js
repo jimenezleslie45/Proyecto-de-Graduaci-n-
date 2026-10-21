@@ -20,7 +20,7 @@ export const useAuthStore = create(
           
           // Nota: El backend espera { username, password }
           // Timeout para evitar que el login quede colgado indefinidamente
-          const response = await api.post('http://localhost:3002/api/auth/login', { username: usuario, password: contrasena }, { timeout: 30000 })
+          const response = await api.post('/auth/login', { username: usuario, password: contrasena }, { timeout: 30000 })
 
           const payload = response.data?.data ?? response.data
           const { token, user } = payload

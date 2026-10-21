@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import api from '../services/api'
 import toast from 'react-hot-toast'
 import { useAuthStore } from '../stores/authStore'
+import { normalizeRole } from '../utils/roleAccess'
 import {
   Plus,
   Sparkles,
@@ -53,8 +54,8 @@ const GestionLimpieza = () => {
   const [showEmpSugg, setShowEmpSugg] = useState(false)
   const [showEmpSuggAsig, setShowEmpSuggAsig] = useState(false)
 
-  const rolActual = (usuario?.rol || 'limpieza').toString().toLowerCase().trim()
-  const esAdminORecpcion = rolActual === 'admin' || rolActual === 'recepcion'
+  const rolActual = normalizeRole(usuario?.rol || usuario?.role)
+  const esAdmin = rolActual === 'admin'
   const esLimpieza = rolActual === 'limpieza'
 
   useEffect(() => {
@@ -325,7 +326,7 @@ const GestionLimpieza = () => {
 
         {/* Botones según rol */}
         <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-slate-100">
-{esAdminORecpcion && (
+{esAdmin && (
             <>
               <button
                 onClick={() => openAssignModal(tarea)}
@@ -405,10 +406,12 @@ const GestionLimpieza = () => {
           <p className="text-gray-500">Gestión de tareas del área de housekeeping</p>
         </div>
         <div className="flex gap-2">
-          <button onClick={openCreateModal} className="btn btn-primary flex items-center gap-2">
-            <Plus className="w-5 h-5" />
-            Nueva Tarea
-          </button>
+          {esAdmin && (
+            <button onClick={openCreateModal} className="btn btn-primary flex items-center gap-2">
+              <Plus className="w-5 h-5" />
+              Nueva Tarea
+            </button>
+          )}
         </div>
       </div>
 

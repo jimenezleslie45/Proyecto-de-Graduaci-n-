@@ -15,91 +15,41 @@ import {
   CalendarRange
 } from 'lucide-react'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { ThemeToggle } from '../components/ui/ThemeToggle'
 import { Button } from '../components/ui/Button'
+import { canAccessRoute, normalizeRole } from '../utils/roleAccess'
 
 const navigation = [
-  // 1) Panel (Dashboard visual) - Admin, Recepcionista
-  { name: 'Panel', href: '/panel', icon: LayoutDashboard, roles: ['recepcion', 'admin'] },
-
-  // 2) Reservas - Admin, Recepcionista
-  { name: 'Reservas', href: '/reservas', icon: CalendarRange, roles: ['recepcion', 'admin'] },
-
-  // 3) Registro de Check-in - Admin, Recepcionista
-  { name: 'Registro', href: '/registro', icon: LogIn, roles: ['recepcion', 'admin'] },
-
-  // 4) Registro de Check-out - Admin, Recepcionista
-  { name: 'Salidas', href: '/salidas', icon: LogOut, roles: ['recepcion', 'admin'] },
-
-  // 5) Gestión de Habitaciones - Admin, Recepcionista
-  { name: 'Habitaciones', href: '/habitaciones', icon: DoorOpen, roles: ['admin', 'recepcion'] },
-
-  // 5) Monitor de Estados - Todos los roles
-  { name: 'Monitor', href: '/monitor', icon: Monitor, roles: ['recepcion', 'limpieza', 'admin'] },
-
-// 6) Gestión de Tareas de Limpieza - Admin, Recepción, Limpieza
-  { name: 'Gestión de Tareas de Limpieza', href: '/limpieza', icon: Sparkles, roles: ['limpieza', 'recepcion', 'admin'] },
-
-  // 7) Ejecución de Limpieza - Admin, Limpieza
-  { name: 'Ejecución Limpieza', href: '/limpieza/ejecutar', icon: Play, roles: ['limpieza', 'admin'] },
-
-  // 8) Reporte de Mantenimiento - Admin
-  { name: 'Reporte Mantenimiento', href: '/mantenimiento', icon: Wrench, roles: ['admin'] },
-
-  // 9) Ejecución de Mantenimiento - Admin
-  { name: 'Ejecución Mantenimiento', href: '/mantenimiento/ejecutar', icon: Play, roles: ['admin'] },
-
-// 10) Reportes y KPIs - Solo Admin
-  { name: 'Reportes Automatizados y KPIs', href: '/reportes', icon: FileBarChart, roles: ['admin'] },
-
-  // 11) Usuarios - Solo Admin
-  { name: 'Usuarios', href: '/usuarios', icon: Users, roles: ['admin'] },
+  { name: 'Panel', href: '/panel', icon: LayoutDashboard },
+  { name: 'Reservas', href: '/reservas', icon: CalendarRange },
+  { name: 'Registro', href: '/registro', icon: LogIn },
+  { name: 'Salidas', href: '/salidas', icon: LogOut },
+  { name: 'Habitaciones', href: '/habitaciones', icon: DoorOpen },
+  { name: 'Monitor', href: '/monitor', icon: Monitor },
+  { name: 'Gestión de Tareas de Limpieza', href: '/limpieza', icon: Sparkles },
+  { name: 'Ejecución Limpieza', href: '/limpieza/ejecutar', icon: Play },
+  { name: 'Reporte Mantenimiento', href: '/mantenimiento', icon: Wrench },
+  { name: 'Ejecución Mantenimiento', href: '/mantenimiento/ejecutar', icon: Play },
+  { name: 'Reportes Automatizados y KPIs', href: '/reportes', icon: FileBarChart },
+  { name: 'Usuarios', href: '/usuarios', icon: Users },
 ]
-
-
 
 const MainLayout = () => {
   const { usuario, cerrarSesion } = useAuthStore()
   const navigate = useNavigate()
 
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const rolActual = normalizeRole(usuario?.rol || usuario?.role)
 
   const handleLogout = () => {
     cerrarSesion()
     navigate('/ingreso')
   }
 
-  // Pon esto justo abajo de donde declaras tus "const { usuario } = useAuthStore()"
-  useEffect(() => {
-    // Si la consola del backend ya sabe qué rol es pero el frontend no tiene token:
-    if (!localStorage.getItem('token')) {
-      // Le inyectamos un token temporal para que las peticiones de las habitaciones funcionen
-      localStorage.setItem('token', 'token_desarrollo_simulado');
-      localStorage.setItem('userRole', usuario?.rol || 'limpieza');
-    }
-  }, [usuario]);
-  
-  // ====== EN TU MAINLAYOUT.JSX ======
-  
-  // 1. Capturamos el rol real que está detectando tu consola
-  const rolActual = usuario?.rol || usuario?.userRole || localStorage.getItem('userRole');
-  
-  // 2. Filtramos el menú de forma inteligente
-  const filteredNavigation = navigation.filter(item => {
-    // Si eres Admin, ves absolutamente todo (las 10 pantallas)
-    if (rolActual === 'admin') return true;
-  
-    // Si no hay ningún rol detectado aún, por seguridad ocultamos hasta que cargue
-    if (!rolActual) return false;
-  
-    // Normalizamos el texto (por si acaso viene como 'Limpieza' o 'recepcionista')
-    let finalRole = rolActual.toString().toLowerCase().trim();
-    if (finalRole === 'recepcionista') finalRole = 'recepcion';
-  
-    // Si el item de navegación incluye este rol, lo muestra.
-    return item.roles.includes(finalRole);
-  });
+  const filteredNavigation = navigation.filter((item) =>
+    canAccessRoute(rolActual, item.href)
+  )
 
 return (
     <div className="min-h-screen bg-gradient-to-br from-[#f8f3e7] via-[#e8ddbc] to-[#cba96d]/30 backdrop-blur-xl">

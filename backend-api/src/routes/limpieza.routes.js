@@ -5,9 +5,9 @@ const { authenticate } = require('../middlewares/auth');
 const { authorize } = require('../middlewares/roles');
 const { validate, commonRules, taskRules } = require('../middlewares/validator');
 
-// Roles permitidos en la pantalla 6: Admin, Recepción, Housekeeping (limpieza)
-const canAccessCleaning = authorize('admin', 'recepcion', 'limpieza');
-const canManageCleaning = authorize('admin', 'recepcion');
+// Cleaning task screens are available to administrators and cleaning staff.
+const canAccessCleaning = authorize('admin', 'limpieza');
+const canManageCleaning = authorize('admin');
 
 // GET /api/limpieza/tareas - Get all cleaning tasks
 router.get('/tareas', authenticate, canAccessCleaning, limpiezaController.getAll);
@@ -24,13 +24,13 @@ router.post('/tareas', authenticate, canManageCleaning, taskRules.create, valida
 // PUT /api/limpieza/tareas/:id - Update cleaning task (start, complete)
 router.put('/tareas/:id', authenticate, canAccessCleaning, taskRules.update, validate, limpiezaController.update);
 
-// PUT /api/limpieza/tareas/:id/prioridad - Change task priority (Admin/Recepción)
+// PUT /api/limpieza/tareas/:id/prioridad - Change task priority (Admin)
 router.put('/tareas/:id/prioridad', authenticate, canManageCleaning, limpiezaController.changePriority);
 
-// POST /api/limpieza/tareas/:id/asignar - Assign task to employee (Admin/Recepción)
+// POST /api/limpieza/tareas/:id/asignar - Assign task to employee (Admin)
 router.post('/tareas/:id/asignar', authenticate, canManageCleaning, limpiezaController.assign);
 
-// DELETE /api/limpieza/tareas/:id - Delete task (Admin/Recepción)
+// DELETE /api/limpieza/tareas/:id - Delete task (Admin)
 router.delete('/tareas/:id', authenticate, canManageCleaning, limpiezaController.remove);
 
 module.exports = router;

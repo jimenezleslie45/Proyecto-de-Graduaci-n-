@@ -52,6 +52,35 @@ const getDashboardKPIs = async (req, res) => {
   }
 };
 
+const getBasicKPIs = async (req, res) => {
+  try {
+    const query = `
+      SELECT
+        (SELECT COUNT(*) FROM dbo.habitacion) as habitaciones_totales,
+        (SELECT COUNT(*) FROM dbo.habitacion h INNER JOIN dbo.estado_habitacion eh ON h.id_estado_actual = eh.id_estado WHERE UPPER(eh.nombre) = 'DISPONIBLE') as habitaciones_disponibles,
+        (SELECT COUNT(*) FROM dbo.habitacion h INNER JOIN dbo.estado_habitacion eh ON h.id_estado_actual = eh.id_estado WHERE UPPER(eh.nombre) = 'OCUPADA') as habitaciones_ocupadas
+    `;
+    const data = (await db.query(query))[0] || {};
+    const habitacionesTotales = data.habitaciones_totales || 0;
+    const habitacionesOcupadas = data.habitaciones_ocupadas || 0;
+
+    return res.json({
+      success: true,
+      data: {
+        habitaciones_totales: habitacionesTotales,
+        habitaciones_disponibles: data.habitaciones_disponibles || 0,
+        habitaciones_ocupadas: habitacionesOcupadas,
+        porcentaje_ocupacion: habitacionesTotales > 0
+          ? Math.round((habitacionesOcupadas / habitacionesTotales) * 1000) / 10
+          : 0
+      }
+    });
+  } catch (error) {
+    logger.error('Error getting basic dashboard KPIs:', error);
+    return res.status(500).json({ success: false, message: 'Error al obtener indicadores básicos' });
+  }
+};
+
 const getLimpiezaKPIs = async (req, res) => {
   try {
     const { fecha_inicio, fecha_fin } = req.query;
@@ -308,6 +337,7 @@ const exportReport = async (req, res) => {
 
 module.exports = {
   getDashboardKPIs,
+  getBasicKPIs,
   getLimpiezaKPIs,
   getOcupacionReport,
   getDailyReport,

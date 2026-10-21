@@ -63,9 +63,9 @@ const isReceptionistOrAdmin = authorize('recepcion', 'admin');
 const isCleaningOrAdmin = authorize('limpieza', 'admin');
 
 /**
- * Check if user is maintenance staff or admin (Rol mantenimiento retirado, solo admin)
+ * Check if user can execute maintenance work
  */
-const isMaintenanceOrAdmin = authorize('admin');
+const isMaintenanceOrAdmin = authorize('admin', 'limpieza');
 
 /**
  * Check if user can perform operations (receptionist, admin)

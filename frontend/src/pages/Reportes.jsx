@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import api from '../services/api'
+import { useAuthStore } from '../stores/authStore'
+import { normalizeRole } from '../utils/roleAccess'
 import toast from 'react-hot-toast'
 import {
   RefreshCw,
@@ -35,6 +37,8 @@ const PERIODOS = [
 ]
 
 const Reportes = () => {
+  const userRole = useAuthStore((state) => state.usuario?.rol || state.usuario?.role)
+  const isAdmin = normalizeRole(userRole) === 'admin'
   const [kpis, setKpis] = useState(null)
   const [loading, setLoading] = useState(true)
   const [periodo, setPeriodo] = useState('hoy')
@@ -62,7 +66,8 @@ const Reportes = () => {
         params.fecha_inicio = fechaInicio
         params.fecha_fin = fechaFin
       }
-      const response = await api.get('/reportes/kpis', { params })
+      const endpoint = isAdmin ? '/reportes/kpis' : '/reportes/kpis/basicos'
+      const response = await api.get(endpoint, { params })
       setKpis(response.data.data || response.data)
       setLastUpdate(new Date())
     } catch (error) {
@@ -71,7 +76,7 @@ const Reportes = () => {
     } finally {
       setLoading(false)
     }
-  }, [periodo, fechaInicio, fechaFin])
+  }, [isAdmin, periodo, fechaInicio, fechaFin])
 
   useEffect(() => {
     fetchKpis()
@@ -99,8 +104,9 @@ const Reportes = () => {
   }, [])
 
   useEffect(() => {
+    if (!isAdmin) return
     fetchFacturas()
-  }, [fetchFacturas])
+  }, [fetchFacturas, isAdmin])
 
   const fetchHistorialReportes = useCallback(async () => {
     setLoadingReportes(true)
@@ -116,8 +122,9 @@ const Reportes = () => {
   }, [])
 
   useEffect(() => {
+    if (!isAdmin) return
     fetchHistorialReportes()
-  }, [fetchHistorialReportes])
+  }, [fetchHistorialReportes, isAdmin])
 
   const descargarReporte = async (reporte) => {
     try {
@@ -243,6 +250,44 @@ const Reportes = () => {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="w-8 h-8 border-4 border-primary-600 border-t-transparent rounded-full animate-spin" />
+      </div>
+    )
+  }
+
+  if (!isAdmin) {
+    const ocupadas = kpis?.habitaciones_ocupadas || 0
+    const indicadores = [
+      { label: 'Habitaciones totales', value: totalHabitaciones },
+      { label: 'Habitaciones disponibles', value: disponibles },
+      { label: 'Habitaciones ocupadas', value: ocupadas },
+      { label: 'Ocupación', value: `${tasaOcupacion}%` }
+    ]
+
+    return (
+      <div className="space-y-6 animate-fade-in">
+        <div className="flex flex-col gap-4 rounded-2xl bg-gradient-to-r from-violet-700 via-fuchsia-700 to-pink-600 p-6 text-white shadow-xl">
+          <div>
+            <h1 className="text-3xl font-bold">Indicadores básicos</h1>
+            <p className="mt-2 text-sm text-white/80">
+              Resumen de ocupación y disponibilidad de habitaciones.
+              {lastUpdate && ` Actualizado: ${lastUpdate.toLocaleTimeString()}`}
+            </p>
+          </div>
+          <button
+            onClick={fetchKpis}
+            className="inline-flex w-fit items-center gap-2 rounded-xl bg-white/15 px-4 py-2 text-sm font-semibold transition hover:bg-white/25"
+          >
+            <RefreshCw className="h-4 w-4" /> Actualizar
+          </button>
+        </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {indicadores.map((indicador) => (
+            <div key={indicador.label} className="card p-5">
+              <p className="text-sm text-gray-500">{indicador.label}</p>
+              <p className="mt-3 text-3xl font-bold text-primary-600">{indicador.value}</p>
+            </div>
+          ))}
+        </div>
       </div>
     )
   }

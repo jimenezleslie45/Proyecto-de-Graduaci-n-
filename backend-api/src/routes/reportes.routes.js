@@ -2,9 +2,12 @@ const express = require('express');
 const router = express.Router();
 const reportesController = require('../controllers/reportesController');
 const { authenticate } = require('../middlewares/auth');
-const { canManageReports, isAdmin } = require('../middlewares/roles');
+const { authorize, canManageReports } = require('../middlewares/roles');
 
-// GET /api/reportes/kpis - Get KPIs dashboard
+// Basic room KPIs are available to reception; full reporting stays admin-only.
+router.get('/kpis/basicos', authenticate, authorize('admin', 'recepcion'), reportesController.getBasicKPIs);
+
+// GET /api/reportes/kpis - Get full KPIs dashboard
 router.get('/kpis', authenticate, canManageReports, reportesController.getKPIs);
 
 // GET /api/reportes/ocupacion - Get occupancy report
