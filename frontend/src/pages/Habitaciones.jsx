@@ -25,6 +25,10 @@ const Habitaciones = () => {
     capacidad: '',
     precio_base: ''
   })
+  const numeroDuplicado = formData.numero.trim() !== '' && habitaciones.some((habitacion) =>
+    String(habitacion.numero).trim().toLocaleLowerCase() === formData.numero.trim().toLocaleLowerCase() &&
+    habitacion.id !== editingHabitacion?.id
+  )
 
   useEffect(() => {
     fetchData()
@@ -50,6 +54,11 @@ const Habitaciones = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+    if (numeroDuplicado) {
+      toast.error('Ya existe una habitación con ese número')
+      return
+    }
+
     try {
       const payload = {
         numero: formData.numero,
@@ -334,9 +343,15 @@ const Habitaciones = () => {
                   type="text"
                   value={formData.numero}
                   onChange={(e) => setFormData({ ...formData, numero: e.target.value })}
-                  className="input"
+                  className={`input ${numeroDuplicado ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : ''}`}
+                  aria-invalid={numeroDuplicado}
                   required
                 />
+                {numeroDuplicado && (
+                  <p className="mt-1 text-sm text-red-600" role="alert">
+                    Ya existe una habitación con ese número, aunque esté en otro piso.
+                  </p>
+                )}
               </div>
               <div>
                 <label className="label">Piso</label>
@@ -413,7 +428,7 @@ const Habitaciones = () => {
                 <button type="button" onClick={() => setShowModal(false)} className="btn btn-secondary flex-1">
                   Cancelar
                 </button>
-                <button type="submit" className="btn btn-primary flex-1">
+                <button type="submit" className="btn btn-primary flex-1" disabled={numeroDuplicado}>
                   Guardar
                 </button>
               </div>

@@ -297,10 +297,12 @@ const create = async (req, res) => {
     }
 
     if (isDemoMode) {
-      // Validación de número único por hotel (demo)
-      const duplicado = DEMO_HABITACIONES.find(h => h.numero.toString() === nuevoNumero && h.piso === nuevoPiso);
+      // La numeración debe ser única en todo el hotel, sin depender del piso.
+      const duplicado = DEMO_HABITACIONES.find(h =>
+        h.numero.toString().trim().toLowerCase() === nuevoNumero.toLowerCase()
+      );
       if (duplicado) {
-        return res.status(400).json({ success: false, message: 'Ya existe una habitación con ese número' });
+        return res.status(409).json({ success: false, message: 'Ya existe una habitación con ese número en el hotel' });
       }
 
       const newId = DEMO_HABITACIONES.length + 1;
@@ -320,11 +322,11 @@ const create = async (req, res) => {
       return res.status(201).json({ success: true, data: newHabitacion, message: 'Habitación creada exitosamente' });
     }
 
-    // Validación de número único por hotel (BD)
-    const checkQuery = 'SELECT COUNT(*) as total FROM habitacion WHERE numero = @numero AND piso = @piso AND id_hotel = 1';
-    const checkResult = await db.query(checkQuery, { numero: nuevoNumero, piso: nuevoPiso });
+    // Validación de número único por hotel, sin depender del piso.
+    const checkQuery = 'SELECT COUNT(*) as total FROM habitacion WHERE LTRIM(RTRIM(numero)) = @numero AND id_hotel = 1';
+    const checkResult = await db.query(checkQuery, { numero: nuevoNumero });
     if (checkResult[0] && checkResult[0].total > 0) {
-      return res.status(400).json({ success: false, message: 'Ya existe una habitación con ese número en el hotel' });
+      return res.status(409).json({ success: false, message: 'Ya existe una habitación con ese número en el hotel' });
     }
 
     if (nuevaCapacidad != null || nuevaTarifa != null) {
@@ -360,6 +362,9 @@ const create = async (req, res) => {
       message: 'Habitación creada exitosamente' 
     });
   } catch (error) {
+    if (error.number === 2601 || error.number === 2627) {
+      return res.status(409).json({ success: false, message: 'Ya existe una habitación con ese número en el hotel' });
+    }
     logger.error('Error creating room:', error);
     res.status(500).json({ success: false, message: 'Error al crear habitación' });
   }
@@ -387,11 +392,13 @@ const update = async (req, res) => {
       if (index === -1) {
         return res.status(404).json({ success: false, message: 'Habitación no encontrada' });
       }
-      // Validación de número único por hotel (demo)
+      // Validación de número único en todo el hotel (demo)
       if (nuevoNumero) {
-        const duplicado = DEMO_HABITACIONES.find(h => h.id !== parseInt(id) && h.numero.toString() === nuevoNumero && h.piso === (nuevoPiso ?? DEMO_HABITACIONES[index].piso));
+        const duplicado = DEMO_HABITACIONES.find(h =>
+          h.id !== parseInt(id) && h.numero.toString().trim().toLowerCase() === nuevoNumero.toLowerCase()
+        );
         if (duplicado) {
-          return res.status(400).json({ success: false, message: 'Ya existe una habitación con ese número' });
+          return res.status(409).json({ success: false, message: 'Ya existe una habitación con ese número en el hotel' });
         }
       }
       if (nuevoNumero) DEMO_HABITACIONES[index].numero = nuevoNumero;
@@ -403,12 +410,12 @@ const update = async (req, res) => {
       return res.json({ success: true, data: DEMO_HABITACIONES[index], message: 'Habitación actualizada exitosamente' });
     }
 
-    // Validación de número único por hotel (BD) - excluyendo el registro actual
+    // Validación de número único por hotel, excluyendo el registro actual.
     if (nuevoNumero) {
-      const checkQuery = 'SELECT COUNT(*) as total FROM habitacion WHERE numero = @numero AND piso = @piso AND id_hotel = 1 AND id_habitacion != @id';
-      const checkResult = await db.query(checkQuery, { numero: nuevoNumero, piso: nuevoPiso ?? 0, id: parseInt(id) });
+      const checkQuery = 'SELECT COUNT(*) as total FROM habitacion WHERE LTRIM(RTRIM(numero)) = @numero AND id_hotel = 1 AND id_habitacion != @id';
+      const checkResult = await db.query(checkQuery, { numero: nuevoNumero, id: parseInt(id) });
       if (checkResult[0] && checkResult[0].total > 0) {
-        return res.status(400).json({ success: false, message: 'Ya existe una habitación con ese número en el hotel' });
+        return res.status(409).json({ success: false, message: 'Ya existe una habitación con ese número en el hotel' });
       }
     }
 
@@ -442,6 +449,9 @@ const update = async (req, res) => {
     
     res.json({ success: true, message: 'Habitación actualizada exitosamente' });
   } catch (error) {
+    if (error.number === 2601 || error.number === 2627) {
+      return res.status(409).json({ success: false, message: 'Ya existe una habitación con ese número en el hotel' });
+    }
     logger.error('Error updating room:', error);
     res.status(500).json({ success: false, message: 'Error al actualizar habitación' });
   }

@@ -15,14 +15,26 @@ import {
 import { StatCard } from '../components/ui/StatCard'
 import { motion } from 'framer-motion'
 
+const CAPACIDAD_HOTEL = 100
+
+const getRoomStatus = (room) => {
+  const status = room.estado?.nombre || room.estado_nombre || room.estado
+  return String(status || '').trim().toUpperCase()
+}
+
+const ESTADOS_LIMPIEZA = ['SUCIA', 'PENDIENTE_LIMPIEZA', 'LIMPIEZA']
+const ESTADOS_MANTENIMIENTO = ['EN_MANTENIMIENTO', 'MANTENIMIENTO', 'BLOQUEADA']
+const ESTADOS_CONTEO = ['DISPONIBLE', 'OCUPADA', ...ESTADOS_LIMPIEZA, ...ESTADOS_MANTENIMIENTO]
+
 const Dashboard = () => {
-  const [rooms, setRooms] = useState([])
   const [stats, setStats] = useState({
-    total: 0,
+    total: CAPACIDAD_HOTEL,
+    registradas: 0,
     disponibles: 0,
     ocupadas: 0,
     limpieza: 0,
     mantenimiento: 0,
+    sinConfigurar: CAPACIDAD_HOTEL,
     piso1: { total: 0, disponibles: 0, ocupadas: 0, limpieza: 0, mantenimiento: 0, capacidad: 50 },
     piso2: { total: 0, disponibles: 0, ocupadas: 0, limpieza: 0, mantenimiento: 0, capacidad: 50 },
     hoy: { checkins_hoy: 0, checkouts_hoy: 0, limpieza_completada: 0, tasa_ocupacion: 0 }
@@ -62,52 +74,42 @@ const Dashboard = () => {
         activeStaysCount = Array.isArray(checkinPayload) ? checkinPayload.length : 0
       }
 
-      setRooms(roomList)
-
       // Cálculos globales
-      const total = roomList.length
-      const disponibles = roomList.filter((r) => (r.estado || '').toUpperCase() === 'DISPONIBLE').length
-      const ocupadas = Math.max(
-        activeStaysCount,
-        roomList.filter((r) => (r.estado || '').toUpperCase() === 'OCUPADA').length
-      )
-      const limpieza = roomList.filter((r) =>
-        ['SUCIA', 'PENDIENTE_LIMPIEZA', 'LIMPIEZA'].includes((r.estado || '').toUpperCase())
+      const total = CAPACIDAD_HOTEL
+      const ocupadas = roomList.filter((room) => getRoomStatus(room) === 'OCUPADA').length
+      const limpieza = roomList.filter((room) => ESTADOS_LIMPIEZA.includes(getRoomStatus(room))).length
+      const mantenimiento = roomList.filter((room) => ESTADOS_MANTENIMIENTO.includes(getRoomStatus(room))).length
+      const otrosNoDisponibles = roomList.filter((room) =>
+        !ESTADOS_CONTEO.includes(getRoomStatus(room))
       ).length
-      const mantenimiento = roomList.filter((r) =>
-        ['EN_MANTENIMIENTO', 'MANTENIMIENTO', 'BLOQUEADA'].includes((r.estado || '').toUpperCase())
-      ).length
+      const disponibles = Math.max(total - ocupadas - limpieza - mantenimiento - otrosNoDisponibles, 0)
+      const registradas = roomList.length
+      const sinConfigurar = Math.max(total - registradas, 0)
 
       // Desglose Piso 1
       const p1Rooms = roomList.filter((r) => String(r.piso) === '1')
-      const p1Disponibles = p1Rooms.filter((r) => (r.estado || '').toUpperCase() === 'DISPONIBLE').length
-      const p1Ocupadas = p1Rooms.filter((r) => (r.estado || '').toUpperCase() === 'OCUPADA').length
-      const p1Limpieza = p1Rooms.filter((r) =>
-        ['SUCIA', 'PENDIENTE_LIMPIEZA', 'LIMPIEZA'].includes((r.estado || '').toUpperCase())
-      ).length
-      const p1Mantenimiento = p1Rooms.filter((r) =>
-        ['EN_MANTENIMIENTO', 'MANTENIMIENTO', 'BLOQUEADA'].includes((r.estado || '').toUpperCase())
-      ).length
+      const p1Disponibles = p1Rooms.filter((r) => getRoomStatus(r) === 'DISPONIBLE').length
+      const p1Ocupadas = p1Rooms.filter((r) => getRoomStatus(r) === 'OCUPADA').length
+      const p1Limpieza = p1Rooms.filter((r) => ESTADOS_LIMPIEZA.includes(getRoomStatus(r))).length
+      const p1Mantenimiento = p1Rooms.filter((r) => ESTADOS_MANTENIMIENTO.includes(getRoomStatus(r))).length
 
       // Desglose Piso 2
       const p2Rooms = roomList.filter((r) => String(r.piso) === '2')
-      const p2Disponibles = p2Rooms.filter((r) => (r.estado || '').toUpperCase() === 'DISPONIBLE').length
-      const p2Ocupadas = p2Rooms.filter((r) => (r.estado || '').toUpperCase() === 'OCUPADA').length
-      const p2Limpieza = p2Rooms.filter((r) =>
-        ['SUCIA', 'PENDIENTE_LIMPIEZA', 'LIMPIEZA'].includes((r.estado || '').toUpperCase())
-      ).length
-      const p2Mantenimiento = p2Rooms.filter((r) =>
-        ['EN_MANTENIMIENTO', 'MANTENIMIENTO', 'BLOQUEADA'].includes((r.estado || '').toUpperCase())
-      ).length
+      const p2Disponibles = p2Rooms.filter((r) => getRoomStatus(r) === 'DISPONIBLE').length
+      const p2Ocupadas = p2Rooms.filter((r) => getRoomStatus(r) === 'OCUPADA').length
+      const p2Limpieza = p2Rooms.filter((r) => ESTADOS_LIMPIEZA.includes(getRoomStatus(r))).length
+      const p2Mantenimiento = p2Rooms.filter((r) => ESTADOS_MANTENIMIENTO.includes(getRoomStatus(r))).length
 
-      const tasaOcupacion = total > 0 ? Math.round((ocupadas / total) * 100) : 0
+      const tasaOcupacion = Math.round((ocupadas / total) * 100)
 
       setStats({
         total,
+        registradas,
         disponibles,
         ocupadas,
         limpieza,
         mantenimiento,
+        sinConfigurar,
         piso1: {
           total: p1Rooms.length,
           disponibles: p1Disponibles,
@@ -140,7 +142,7 @@ const Dashboard = () => {
 
   const statCards = [
     {
-      name: 'Disponibles',
+      name: 'Capacidad restante',
       value: stats.disponibles,
       total: stats.total,
       icon: DoorOpen,
@@ -189,7 +191,7 @@ const Dashboard = () => {
         </div>
         <div className="flex items-center gap-2 text-xs font-semibold text-[#1f2d3d] bg-white border border-[#e5ded0] rounded-xl px-4 py-2 shadow-sm">
           <Building className="w-4 h-4 text-[#8a7647]" />
-          Capacidad Total: <span className="text-[#8a7647] font-bold">100 Habitaciones</span> (Piso 1: 50 | Piso 2: 50)
+          Capacidad Total: <span className="text-[#8a7647] font-bold">{stats.total} Habitaciones</span> · {stats.registradas} registradas · {stats.sinConfigurar} sin configurar
         </div>
       </div>
 
@@ -216,6 +218,9 @@ const Dashboard = () => {
           </motion.div>
         ))}
       </motion.div>
+      <p className="text-right text-xs text-gray-500">
+        La capacidad restante descuenta habitaciones ocupadas, en limpieza y en mantenimiento; incluye las aún no configuradas.
+      </p>
 
       {/* DETALLES POR PISOS (PISO 1 Y PISO 2) */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

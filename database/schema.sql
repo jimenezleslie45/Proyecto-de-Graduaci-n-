@@ -61,7 +61,7 @@ CREATE TABLE Habitacion (
     fecha_actualizacion DATETIME DEFAULT GETDATE(),
     FOREIGN KEY (id_tipo_habitacion) REFERENCES TipoHabitacion(id),
     FOREIGN KEY (id_estado) REFERENCES EstadoHabitacion(id),
-    CONSTRAINT UQ_Habitacion_Numero UNIQUE (numero, piso)
+    CONSTRAINT UQ_Habitacion_Numero UNIQUE (numero)
 );
 
 -- =====================================================
