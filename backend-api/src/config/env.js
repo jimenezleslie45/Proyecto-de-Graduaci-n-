@@ -5,7 +5,7 @@ module.exports = {
   nodeEnv: process.env.NODE_ENV || 'development',
   
   db: {
-    server: process.env.DB_SERVER || 'localhost',
+    server: process.env.DB_SERVER ? process.env.DB_SERVER.trim() : undefined,
     port: parseInt(process.env.DB_PORT) || 1433,
     database: process.env.DB_DATABASE || 'SIGOH',
     user: process.env.DB_USER || undefined,

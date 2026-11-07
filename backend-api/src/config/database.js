@@ -8,8 +8,16 @@ let isDemoMode = false;
  * Connect to SQL Server database
  */
 const connect = async () => {
-  if (config.nodeEnv === 'production' && (!config.db.user || !config.db.password)) {
-    throw new Error('DB_USER and DB_PASSWORD must be configured in production.');
+  if (config.nodeEnv === 'production') {
+    const missingConfig = [];
+    if (!config.db.server) missingConfig.push('DB_SERVER');
+    if (!config.db.database) missingConfig.push('DB_DATABASE');
+    if (!config.db.user) missingConfig.push('DB_USER');
+    if (!config.db.password) missingConfig.push('DB_PASSWORD');
+
+    if (missingConfig.length > 0) {
+      throw new Error(`Missing required production database configuration: ${missingConfig.join(', ')}.`);
+    }
   }
 
   try {
