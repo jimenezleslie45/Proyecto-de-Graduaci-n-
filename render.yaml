@@ -3,7 +3,7 @@ services:
     name: hotel-automation-backend
     runtime: node
     rootDir: backend-api
-    buildCommand: npm install
+    buildCommand: npm install --omit=optional
     startCommand: npm start
     healthCheckPath: /health
     envVars:
