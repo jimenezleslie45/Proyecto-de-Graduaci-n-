@@ -8,9 +8,9 @@ module.exports = {
     server: process.env.DB_SERVER || 'localhost',
     port: parseInt(process.env.DB_PORT) || 1433,
     database: process.env.DB_DATABASE || 'SIGOH',
-    user: process.env.DB_USER || undefined, // Usar undefined para Windows Auth
-    instance: process.env.DB_INSTANCE || undefined, // La instancia es opcional y no se asume 'SQLEXPRESS'
-    password: process.env.DB_PASSWORD || undefined, // Usar undefined para Windows Auth
+    user: process.env.DB_USER || undefined,
+    instance: process.env.DB_INSTANCE || undefined,
+    password: process.env.DB_PASSWORD || undefined,
     encrypt: process.env.DB_ENCRYPT === 'true',
     trustCertificate: process.env.DB_TRUST_CERTIFICATE === 'true'
   },

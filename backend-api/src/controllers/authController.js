@@ -69,6 +69,13 @@ const login = async (req, res) => {
     // MODO DEMO: Si la BD no está conectada, usar credenciales demo
     // =====================================================
     if (!db.isConnected()) {
+      if (config.nodeEnv === 'production') {
+        return res.status(503).json({
+          success: false,
+          message: 'La base de datos no está disponible'
+        });
+      }
+
       logger.warn('Ejecutando login en MODO DEMO (sin conexión a BD)');
       const demoUser = DEMO_USERS.find((u) => u.username === loginUser);
 

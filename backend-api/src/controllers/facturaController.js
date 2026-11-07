@@ -1,4 +1,7 @@
-const mssql = require('mssql/msnodesqlv8');
+const config = require('../config/env');
+const mssql = config.db.user && config.db.password
+  ? require('mssql')
+  : require('mssql/msnodesqlv8');
 const db = require('../config/database');
 const logger = require('../middlewares/logger');
 const PDFDocument = require('pdfkit');

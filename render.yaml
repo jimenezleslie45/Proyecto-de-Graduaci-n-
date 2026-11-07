@@ -1,0 +1,31 @@
+services:
+  - type: web
+    name: hotel-automation-backend
+    runtime: node
+    rootDir: backend-api
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DB_SERVER
+        sync: false
+      - key: DB_PORT
+        value: "1433"
+      - key: DB_DATABASE
+        sync: false
+      - key: DB_USER
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      - key: DB_ENCRYPT
+        value: "true"
+      - key: DB_TRUST_CERTIFICATE
+        value: "false"
+      - key: FRONTEND_URL
+        sync: false
+      - key: SOCKET_CORS_ORIGIN
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true

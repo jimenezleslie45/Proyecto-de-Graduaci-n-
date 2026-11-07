@@ -1,4 +1,3 @@
-const mssql = require('mssql/msnodesqlv8');
 const config = require('./env');
 const logger = require('../middlewares/logger');
 
@@ -9,27 +8,43 @@ let isDemoMode = false;
  * Connect to SQL Server database
  */
 const connect = async () => {
+  if (config.nodeEnv === 'production' && (!config.db.user || !config.db.password)) {
+    throw new Error('DB_USER and DB_PASSWORD must be configured in production.');
+  }
+
   try {
     if (pool) {
       return pool;
     }
-    
-    const serverName = config.db.instance 
-      ? `${config.db.server}\\${config.db.instance}` 
-      : config.db.server;
 
-    // FIX: Usar un único objeto de configuración limpio y directo para la conexión.
-    const dbConfig = {
-      server: serverName,
-      database: config.db.database,
-      driver: 'msnodesqlv8',
-      options: {
-        trustedConnection: true
-      }
-    };
+    const useSqlCredentials = Boolean(config.db.user && config.db.password);
+    const sql = useSqlCredentials ? require('mssql') : require('mssql/msnodesqlv8');
+    const serverName = config.db.instance
+      ? `${config.db.server}\\${config.db.instance}`
+      : config.db.server;
+    const dbConfig = useSqlCredentials
+      ? {
+          server: serverName,
+          port: config.db.port,
+          database: config.db.database,
+          user: config.db.user,
+          password: config.db.password,
+          options: {
+            encrypt: config.db.encrypt,
+            trustServerCertificate: config.db.trustCertificate
+          }
+        }
+      : {
+          server: serverName,
+          database: config.db.database,
+          driver: 'msnodesqlv8',
+          options: {
+            trustedConnection: true
+          }
+        };
 
     logger.info('Connecting to SQL Server...');
-    pool = await mssql.connect(dbConfig);
+    pool = await sql.connect(dbConfig);
     
     logger.info('Connected to SQL Server successfully');
     
@@ -40,11 +55,15 @@ const connect = async () => {
     
     return pool;
   } catch (error) {
-    // FIX: Se añade un log más detallado para diagnosticar el problema de conexión.
     logger.error('----------------------------------------------------');
     logger.error('FALLO LA CONEXIÓN A LA BASE DE DATOS - DETALLES:');
     logger.error(`Error: ${JSON.stringify(error, Object.getOwnPropertyNames(error))}`);
     logger.error('----------------------------------------------------');
+
+    if (config.nodeEnv === 'production') {
+      throw error;
+    }
+
     isDemoMode = true;
     logger.warn('Running in demo mode - no database connection');
     return null;
