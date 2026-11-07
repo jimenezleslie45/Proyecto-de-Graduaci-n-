@@ -1,11 +1,12 @@
 const config = require('../config/env');
-const mssql = config.db.user && config.db.password
-  ? require('mssql')
-  : require('mssql/msnodesqlv8');
 const db = require('../config/database');
 const logger = require('../middlewares/logger');
 const PDFDocument = require('pdfkit');
 const { enviarFacturaPorCorreo } = require('../services/emailService');
+
+const getMssqlDriver = () => config.db.user && config.db.password
+  ? require('mssql')
+  : require('mssql/msnodesqlv8');
 
 /**
  * Crea una nueva factura, sus detalles y actualiza el estado de la habitación.
@@ -24,6 +25,7 @@ const crearFactura = async (req, res) => {
     return res.status(500).json({ success: false, message: 'No se pudo conectar a la base de datos.' });
   }
 
+  const mssql = getMssqlDriver();
   const transaction = new mssql.Transaction(pool);
 
   try {
